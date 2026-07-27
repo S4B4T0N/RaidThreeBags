@@ -7,8 +7,10 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 `0.4.0` is the stable local release source. It passes static validation and
 the retained behavior mock. On 2026-07-27 the exact development candidate was
 copied into a WotLK 3.3.5a client, matched the candidate files by SHA-256 and
-passed user-operated in-client verification. The project has not yet been
-published to GitHub or submitted to Warperia.
+passed user-operated in-client verification. The source repository is public
+at [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags),
+and its GitHub Actions release validation passes on `main`. No GitHub Release
+or Warperia submission has been created yet.
 
 ## Features
 
