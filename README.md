@@ -4,13 +4,18 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 
 ## Project status
 
-`0.4.0` is the stable local release source. It passes static validation and
-the retained behavior mock. On 2026-07-27 the exact development candidate was
-copied into a WotLK 3.3.5a client, matched the candidate files by SHA-256 and
-passed user-operated in-client verification. The source repository is public
-at [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags),
-and its GitHub Actions release validation passes on `main`. Release archives
-are published on the [GitHub Releases page](https://github.com/S4B4T0N/RaidThreeBags/releases).
+`0.4.1` is the stable release source. This packaging-only update places the
+installable addon files at repository root so Warperia can install the GitHub
+default-branch archive directly. The Lua behavior is unchanged from `0.4.0`;
+only the reported version and repository layout changed.
+
+The retained behavior mock and isolated Warperia GitHub-layout simulation
+pass. On 2026-07-27 the behavior-identical development candidate was copied
+into a WotLK 3.3.5a client, matched the candidate files by SHA-256 and passed
+user-operated in-client verification. The source repository is public at
+[github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags),
+and release archives are published on the
+[GitHub Releases page](https://github.com/S4B4T0N/RaidThreeBags/releases).
 The project has not yet been submitted to Warperia.
 
 ## Features
@@ -27,7 +32,9 @@ Settings and window positions are account-wide by design. The addon does not use
 
 ## Install
 
-Copy the inner `RaidThreeBags` directory into `World of Warcraft/Interface/AddOns/`. The final manifest path must be:
+Extract the release ZIP into `World of Warcraft/Interface/AddOns/`. The
+repository root also represents the contents of the `RaidThreeBags` addon
+folder for GitHub-backed installers. The final manifest path must be:
 
 ```text
 Interface/AddOns/RaidThreeBags/RaidThreeBags.toc
@@ -72,7 +79,5 @@ lua tests/SettingsLogicMock.lua RaidThreeBags
 
 ## License
 
-MIT. See the repository [LICENSE](LICENSE). An identical copy is included as
-[`RaidThreeBags/LICENSE`](RaidThreeBags/LICENSE), so the copyright and
-permission notice remain present when only the installable addon directory is
-packaged.
+MIT. See [LICENSE](LICENSE). The root-level license is included inside the
+installable `RaidThreeBags` directory in every release ZIP.

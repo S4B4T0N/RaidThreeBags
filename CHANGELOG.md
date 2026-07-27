@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 - 2026-07-27
+
+- Moved the installable `.toc`, Lua files and MIT license to repository root
+  for Warperia's default-branch GitHub installer.
+- Added an isolated simulation that verifies the resulting manifest path is
+  `Interface/AddOns/RaidThreeBags/RaidThreeBags.toc`.
+- Kept addon behavior unchanged; only repository layout and version
+  identifiers changed.
+
 ## 0.4.0 - 2026-07-27
 
 - Prepared a clean public-repository package.

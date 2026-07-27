@@ -12,6 +12,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Validate release source
+      - name: Validate release and Warperia layout
         shell: pwsh
         run: ./scripts/Validate-Release.ps1
