@@ -46,3 +46,16 @@ Record client/server build, addon set, result and stack traces. Promote the vers
 - Promotion to `0.4.0` changed only source-controlled version identifiers and
   documentation after this runtime verification; addon behavior was not
   changed.
+
+## Packaging verification - 0.4.1
+
+- `0.4.1` changes only the repository layout and reported version.
+- `RTB_Bank.lua` and `RTB_UI.lua` remain byte-identical to `v0.4.0`.
+- `RaidThreeBags.lua` differs only in `RTB.VERSION`.
+- `RaidThreeBags.toc` differs only in the title and version values.
+- The isolated Warperia GitHub-layout simulation verifies the final path
+  `Interface/AddOns/RaidThreeBags/RaidThreeBags.toc` and all files referenced
+  by the manifest.
+- The existing in-client behavior evidence therefore applies to the unchanged
+  Lua behavior. No fresh live-client runtime claim is made for the packaging
+  operation itself.

@@ -3,35 +3,25 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$addonRoot = Join-Path $repoRoot 'RaidThreeBags'
+$addonRoot = $repoRoot
 $tocPath = Join-Path $addonRoot 'RaidThreeBags.toc'
 $corePath = Join-Path $addonRoot 'RaidThreeBags.lua'
 $repositoryLicensePath = Join-Path $repoRoot 'LICENSE'
-$addonLicensePath = Join-Path $addonRoot 'LICENSE'
+$expectedVersion = '0.4.1'
 
 foreach ($required in @(
     $tocPath,
     $corePath,
-    $repositoryLicensePath,
-    $addonLicensePath
+    $repositoryLicensePath
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Missing required file: $required"
     }
 }
 
-$repositoryLicense = (
-    Get-Content -LiteralPath $repositoryLicensePath -Raw
-) -replace "`r`n", "`n"
-$addonLicense = (
-    Get-Content -LiteralPath $addonLicensePath -Raw
-) -replace "`r`n", "`n"
-if (-not [string]::Equals(
-    $repositoryLicense,
-    $addonLicense,
-    [System.StringComparison]::Ordinal
-)) {
-    throw 'Repository and installable-addon LICENSE files differ.'
+$legacyNestedToc = Join-Path $repoRoot 'RaidThreeBags\RaidThreeBags.toc'
+if (Test-Path -LiteralPath $legacyNestedToc) {
+    throw "Legacy nested addon layout found: $legacyNestedToc"
 }
 
 $behaviorTest = Join-Path $repoRoot 'tests\SettingsLogicMock.lua'
@@ -46,6 +36,9 @@ $tocLicense = ($toc | Where-Object { $_ -match '^## X-License:\s*(.+)$' } |
     ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
 if ($tocLicense -ne 'MIT') {
     throw "TOC license mismatch: expected 'MIT', found '$tocLicense'."
+}
+if ($tocVersion -ne $expectedVersion) {
+    throw "TOC version mismatch: expected '$expectedVersion', found '$tocVersion'."
 }
 
 $core = Get-Content -LiteralPath $corePath -Raw
@@ -72,8 +65,12 @@ if ($forbiddenFiles) {
     throw "Forbidden local-state files found: $($forbiddenFiles.FullName -join ', ')"
 }
 
-$addonTextFiles = Get-ChildItem -LiteralPath $addonRoot -Recurse -File |
-    Where-Object { $_.Extension -in '.lua', '.toc', '.xml' }
+$addonTextFiles = @(
+    Get-Item -LiteralPath $tocPath
+    foreach ($relativePath in $listedFiles) {
+        Get-Item -LiteralPath (Join-Path $addonRoot $relativePath.Trim())
+    }
+) | Where-Object { $_.Extension -in '.lua', '.toc', '.xml' }
 foreach ($file in $addonTextFiles) {
     $branding = Select-String -LiteralPath $file.FullName -Pattern 'Warmane|ChromieCraft|S4B4T0N_AI'
     if ($branding) {
@@ -85,6 +82,17 @@ foreach ($file in $addonTextFiles) {
     }
 }
 
+$readmePath = Join-Path $repoRoot 'README.md'
+$changelogPath = Join-Path $repoRoot 'CHANGELOG.md'
+$readme = Get-Content -LiteralPath $readmePath -Raw
+$changelog = Get-Content -LiteralPath $changelogPath -Raw
+if ($readme -notmatch [regex]::Escape("``$expectedVersion``")) {
+    throw "README does not identify $expectedVersion as the current release."
+}
+if ($changelog -notmatch "(?m)^##\s+$([regex]::Escape($expectedVersion))\s+-") {
+    throw "CHANGELOG is missing the current $expectedVersion heading."
+}
+
 $allTextFiles = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
     Where-Object { $_.Extension -in '.lua', '.toc', '.md', '.ps1', '.txt' }
 foreach ($file in $allTextFiles) {
@@ -93,5 +101,11 @@ foreach ($file in $allTextFiles) {
         throw "Credential pattern in $($file.FullName):$($secret.LineNumber)"
     }
 }
+
+$warperiaLayoutTest = Join-Path $PSScriptRoot 'Test-WarperiaGitHubLayout.ps1'
+if (-not (Test-Path -LiteralPath $warperiaLayoutTest -PathType Leaf)) {
+    throw "Missing Warperia layout test: $warperiaLayoutTest"
+}
+& $warperiaLayoutTest
 
 Write-Host "RaidThreeBags $tocVersion static release validation passed."

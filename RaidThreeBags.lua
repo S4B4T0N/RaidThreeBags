@@ -9,7 +9,7 @@ RaidThreeBags = RaidThreeBags or {}
 local RTB = RaidThreeBags
 
 RTB.ADDON_NAME = "RaidThreeBags"
-RTB.VERSION = "0.4.0"
+RTB.VERSION = "0.4.1"
 RTB.BAG_IDS = { 0, 1, 2, 3, 4 }
 RTB.BANK_BAG_IDS = { 5, 6, 7, 8, 9, 10, 11 }
 RTB.SPECIAL_BAG_TYPES = {
