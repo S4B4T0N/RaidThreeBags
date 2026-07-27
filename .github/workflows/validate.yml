@@ -11,7 +11,7 @@ jobs:
   static-validation:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate release source
         shell: pwsh
         run: ./scripts/Validate-Release.ps1
