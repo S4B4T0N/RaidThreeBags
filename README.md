@@ -4,37 +4,61 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 
 ## Project status
 
-`0.4.1` is the stable release source. This packaging-only update places the
-installable addon files at repository root so Warperia can install the GitHub
-default-branch archive directly. The Lua behavior is unchanged from `0.4.0`;
-only the reported version and repository layout changed.
+`0.4.3` is the current GitHub alignment candidate. It changes only version identifiers from the exact `0.4.2` addon content selected for distribution; addon behavior is unchanged. Static validation, official PUC Lua 5.1.5 parsing, the retained behavior mock and Warperia GitHub-layout simulation pass.
 
-The retained behavior mock and isolated Warperia GitHub-layout simulation
-pass. On 2026-07-27 the behavior-identical development candidate was copied
-into a WotLK 3.3.5a client, matched the candidate files by SHA-256 and passed
-user-operated in-client verification. The source repository is public at
-[github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags),
-and release archives are published on the
-[GitHub Releases page](https://github.com/S4B4T0N/RaidThreeBags/releases).
-The project has not yet been submitted to Warperia.
+`0.4.2` is the stable source line. The user reports distributing its prepared six-file package through Warperia. A persisted target-client schema-2 trace recorded `PASS` with all 36 physical arrangement operations confirmed exactly. Public listing visibility and Bagnon coexistence were not independently verified here. GitHub `main` still contains `0.4.1`; branch `codex/raid-three-bags-0.4.3` is prepared for a later explicit push.
+
+The public repository is [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags).
 
 ## Features
 
 - unified inventory grid;
 - player-bank window shown while interacting with a banker;
-- live bag-slot and item updates;
-- item cooldowns and lock state;
+- live bag-slot, item, cooldown, lock and money updates;
 - configurable visibility of profession and class bag families;
-- resizable, movable or locked windows;
-- optional coexistence handling for Bagnon.
+- movable, resizable and lockable windows;
+- optional coexistence handling for Bagnon;
+- safe physical arrangement of the live inventory through the `A-Z` button, `/rtb sort` or `/rtb arrange`;
+- retained Sort Trace for the latest ten arrangement sessions.
 
-Settings and window positions are account-wide by design. The addon does not use guild identity, remote services or credentials.
+Settings, window positions, item-age records and Sort Trace are account-wide in `RaidThreeBagsDB`. The addon does not use network services or credentials.
+
+## Inventory arrangement
+
+Arrangement covers only the backpack and equipped bags 0-4. It does not sort the player bank, keyring, guild bank, cached characters or offline inventory.
+
+Normal bags form one movement pool. Every exact nonzero specialty-bag family forms its own pool, so an item is never intentionally moved across incompatible bag families. Within each pool, items are divided into:
+
+1. `TRASH`: poor-quality items with quality 0.
+2. `CURRENT / KEEP`: after the quality-0 rule, non-poor Trade Goods regardless of age, plus other non-trash items first observed less than 24 hours ago.
+3. `OLD / REVIEW`: other non-trash, non-Trade-Goods items first observed at least 24 hours ago and not subsequently observed absent in a complete inventory scan.
+
+One empty slot separates consecutive nonempty sections. Any remaining empty slots are placed immediately before `OLD / REVIEW`, or at the end of the pool when that section is absent.
+
+Items inside each section are ordered hierarchically by:
+
+1. category: Quest, Consumable, Weapon, Armor, Recipe, Gem, Trade Goods, Container, Projectile/Quiver, Key, Miscellaneous, then Other;
+2. lowercase subtype;
+3. physical equipment-slot rank: Head, Neck, Shoulder, Back, Chest/Robe, Wrist, Hands, Waist, Legs, Feet, Finger, Trinket, Main Hand, Two-Hand, Weapon, Off Hand, Shield, Held in Off-hand, Ranged/Thrown, Relic, Tabard, Shirt/Body, Bag, Quiver, then unknown slots;
+4. items usable at the character's current level first;
+5. quality, highest first;
+6. item level, highest first;
+7. lowercase name;
+8. item-ID key as a lexical string, then original inventory scan order, as deterministic tie-breakers.
+
+This is hierarchical ordering, not global alphabetical ordering. Item age is keyed by realm, character and item ID. All copies of the same item ID share one first-observed time until a later complete inventory scan sees no remaining copy and clears the record. The addon cannot prove uninterrupted possession between scans or while offline, and ownership before its first observation cannot be reconstructed.
+
+Before moving anything, the addon checks cursor, combat, item locks, item-cache completeness, bag topology and separator capacity. It simulates compatible same-item partial-stack consolidation only inside the same movement pool and refuses before mutation if separators still cannot be created. During consolidation, it selects the first partial target from the front and a matching source from the back, confirms one native merge, then rebuilds the complete plan.
+
+For arrangement, the addon takes the first incorrect target slot from the front, searches only later slots for the required item and either swaps it into the target or moves it through a later empty slot. Only one logical merge or swap is outstanding at a time; it uses the native `PickupContainerItem` pickup sequence and must leave both affected slots readable, unlocked and exactly confirmed before the next logical operation. The session stops on changed topology, unexpected inventory state or an unconfirmed result.
+
+## Sort Trace and privacy
+
+Sort Trace is enabled by default and retains the latest ten sessions locally in `RaidThreeBagsDB`. It records character and realm names, timestamps, bag topology, item IDs and names, counts, bag/slot coordinates, classification and age metadata, plans, confirmed moves or merges, wait evidence and a `PASS`, `FAIL` or `ABORTED` result. Turning logging off prevents both new trace retention and the independent final audit for future sessions; retained sessions remain until `/rtb sortlog clear`. The addon does not transmit data and does not record chat, character location or credentials. Review and redact SavedVariables before sharing them publicly.
 
 ## Install
 
-Extract the release ZIP into `World of Warcraft/Interface/AddOns/`. The
-repository root also represents the contents of the `RaidThreeBags` addon
-folder for GitHub-backed installers. The final manifest path must be:
+Extract the release ZIP into `World of Warcraft/Interface/AddOns/`. The repository root represents the contents of the `RaidThreeBags` addon folder for GitHub-backed installers. The final manifest path must be:
 
 ```text
 Interface/AddOns/RaidThreeBags/RaidThreeBags.toc
@@ -46,6 +70,12 @@ Interface/AddOns/RaidThreeBags/RaidThreeBags.toc
 /rtb
 /rtb bank
 /rtb settings
+/rtb sort
+/rtb arrange
+/rtb sortlog on|off
+/rtb sortlog status
+/rtb sortlog last
+/rtb sortlog clear
 /rtb reset
 /rtb reset inventory
 /rtb reset bank
@@ -63,21 +93,20 @@ Run:
 ./scripts/Validate-Release.ps1
 ```
 
-See [TESTING.md](docs/TESTING.md) for the required in-client checks.
-
-When a PUC Lua 5.1 runtime is available, the retained behavior mock can be run with:
+With PUC Lua 5.1 available, run:
 
 ```text
-lua tests/SettingsLogicMock.lua RaidThreeBags
+lua tests/SettingsLogicMock.lua .
 ```
+
+See [TESTING.md](docs/TESTING.md) for in-client evidence and [WARPERIA_UPDATE_0.4.2.md](docs/WARPERIA_UPDATE_0.4.2.md) for the preserved `0.4.2` Warperia metadata.
 
 ## Compatibility
 
 - WoW client: 3.3.5a (`Interface: 30300`)
 - Lua: 5.1-era WoW API
-- Bagnon: optional dependency/coexistence path
+- Bagnon: optional dependency/coexistence path; combined runtime verification remains pending
 
 ## License
 
-MIT. See [LICENSE](LICENSE). The root-level license is included inside the
-installable `RaidThreeBags` directory in every release ZIP.
+MIT. See [LICENSE](LICENSE). The root-level license is included inside the installable `RaidThreeBags` directory in every release ZIP.

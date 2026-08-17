@@ -5,6 +5,10 @@
 -- ============================================================
 
 local RTB = RaidThreeBags
+local Style = assert(
+    RaidThreeUIStyle,
+    "RaidThreeUIStyle must load before RTB_Bank.lua"
+)
 
 local ITEM_SIZE = 36
 local ITEM_SPACING = 4
@@ -12,23 +16,6 @@ local ITEM_STEP = ITEM_SIZE + ITEM_SPACING
 local MAX_COLUMNS = 22
 local BANK_BAG_SIZE = 30
 local BANK_BAG_SPACING = 4
-
-local PANEL_BACKDROP = {
-    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true,
-    tileSize = 16,
-    edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 }
-}
-
-local BAG_SLOT_BACKDROP = {
-    bgFile = "Interface\\Buttons\\UI-EmptySlot",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = false,
-    edgeSize = 10,
-    insets = { left = 2, right = 2, top = 2, bottom = 2 }
-}
 
 local EMPTY_SLOT_COLORS = {
     [0] = { 0.48, 0.48, 0.52 },
@@ -207,7 +194,7 @@ function RTB:CreateBankItemButton()
     qualityBorder:SetWidth(62)
     qualityBorder:SetHeight(62)
     qualityBorder:SetPoint("CENTER", button, "CENTER", 0, 0)
-    qualityBorder:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    qualityBorder:SetTexture(Style.TEXTURES.qualityBorder)
     qualityBorder:SetBlendMode("ADD")
     qualityBorder:Hide()
 
@@ -241,7 +228,7 @@ function RTB:UpdateBankItemButton(button, bagID, slotID)
     if texture then
         SetItemButtonTextureVertexColor(button, 1, 1, 1)
         if normalTexture then
-            normalTexture:SetVertexColor(1, 1, 1)
+            normalTexture:SetVertexColor(Style:GetColor("iconNormal"))
         end
     else
         local r, g, b = GetEmptySlotColor(bagType)
@@ -430,11 +417,8 @@ function RTB:CreateBankBagSlot(bagID)
         "RaidThreeBagsBankBag" .. tostring(index),
         self.BankBagBar
     )
-    button:SetWidth(BANK_BAG_SIZE)
-    button:SetHeight(BANK_BAG_SIZE)
+    Style:ApplySquareControl(button)
     button:SetID(bagID)
-    button:SetBackdrop(BAG_SLOT_BACKDROP)
-    button:SetBackdropColor(0.05, 0.05, 0.07, 0.95)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
 
@@ -444,14 +428,14 @@ function RTB:CreateBankBagSlot(bagID)
 
     local highlight = button:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetAllPoints(button)
-    highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    highlight:SetTexture(Style.TEXTURES.highlight)
     highlight:SetBlendMode("ADD")
 
     local cursorHighlight = button:CreateTexture(nil, "OVERLAY")
     cursorHighlight:SetAllPoints(button)
-    cursorHighlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    cursorHighlight:SetTexture(Style.TEXTURES.highlight)
     cursorHighlight:SetBlendMode("ADD")
-    cursorHighlight:SetVertexColor(0.2, 1, 0.2, 0.7)
+    cursorHighlight:SetVertexColor(Style:GetColor("cursorValid"))
     cursorHighlight:Hide()
 
     button.rtbIcon = icon
@@ -505,11 +489,11 @@ function RTB:UpdateBankBagSlots()
         )
 
         if texture then
-            button.rtbIcon:SetVertexColor(1, 1, 1)
+            button.rtbIcon:SetVertexColor(Style:GetColor("iconNormal"))
         elseif purchased then
-            button.rtbIcon:SetVertexColor(0.7, 0.7, 0.7)
+            button.rtbIcon:SetVertexColor(Style:GetColor("disabledIcon"))
         else
-            button.rtbIcon:SetVertexColor(1, 0.15, 0.15)
+            button.rtbIcon:SetVertexColor(Style:GetColor("danger"))
         end
 
         local locked = purchased
@@ -683,9 +667,7 @@ function RTB:BuildBankUI()
     local itemPanel = CreateFrame("Frame", nil, window)
     itemPanel:SetPoint("TOPLEFT", window, "TOPLEFT", 20, -94)
     itemPanel:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -20, 48)
-    itemPanel:SetBackdrop(PANEL_BACKDROP)
-    itemPanel:SetBackdropColor(0.02, 0.02, 0.03, 0.80)
-    itemPanel:SetBackdropBorderColor(0.30, 0.40, 0.52, 0.75)
+    Style:ApplyBackdrop(itemPanel, "panel")
     self.BankItemPanel = itemPanel
 
     local scroll = CreateFrame(
@@ -717,7 +699,7 @@ function RTB:BuildBankUI()
         "GameFontHighlightSmall"
     )
     freeSlotsText:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 24, 24)
-    freeSlotsText:SetTextColor(0.78, 0.86, 0.94)
+    Style:ApplyText(freeSlotsText, "bodySmall")
     self.BankFreeSlotsText = freeSlotsText
 
     local bankSlotsText = window:CreateFontString(
@@ -726,7 +708,7 @@ function RTB:BuildBankUI()
         "GameFontHighlightSmall"
     )
     bankSlotsText:SetPoint("LEFT", freeSlotsText, "RIGHT", 14, 0)
-    bankSlotsText:SetTextColor(0.62, 0.76, 0.88)
+    Style:ApplyText(bankSlotsText, "bodySmall")
     self.BankSlotsText = bankSlotsText
 
     local columnsText = window:CreateFontString(
@@ -735,7 +717,7 @@ function RTB:BuildBankUI()
         "GameFontHighlightSmall"
     )
     columnsText:SetPoint("LEFT", bankSlotsText, "RIGHT", 14, 0)
-    columnsText:SetTextColor(0.52, 0.66, 0.80)
+    Style:ApplyText(columnsText, "muted")
     self.BankColumnsText = columnsText
 
     local moneyText = window:CreateFontString(
@@ -760,7 +742,7 @@ function RTB:BuildBankUI()
 
     local gripTexture = grip:CreateTexture(nil, "ARTWORK")
     gripTexture:SetAllPoints(grip)
-    gripTexture:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    gripTexture:SetTexture(Style.TEXTURES.resize)
 
     grip:SetScript("OnMouseDown", function(_, button)
         if button == "LeftButton" then
@@ -772,14 +754,10 @@ function RTB:BuildBankUI()
         RTB:RequestBankLayout()
     end)
     grip:SetScript("OnEnter", function()
-        gripTexture:SetTexture(
-            "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight"
-        )
+        gripTexture:SetTexture(Style.TEXTURES.resizeHighlight)
     end)
     grip:SetScript("OnLeave", function()
-        gripTexture:SetTexture(
-            "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"
-        )
+        gripTexture:SetTexture(Style.TEXTURES.resize)
     end)
     self.BankResizeGrip = grip
 

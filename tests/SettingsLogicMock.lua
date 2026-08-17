@@ -19,6 +19,39 @@ local cursorTargetSlot
 local putItemSlot
 local pickedUpBagSlot
 local playedSound
+local mockTime = 200000
+local inventoryData = {}
+local inventorySlotCounts = {}
+local itemInfoByID = {}
+local containerCursor
+local combatLocked = false
+local pickupSnapshot
+local laggedInventoryData
+local laggedContainerReads = 0
+local laggedReadsAfterMove = 2
+local postMoveLockReads = 0
+local postMoveLocksRemaining = 0
+
+local function SnapshotInventory()
+    local snapshot = {}
+    local bagID, slots
+    for bagID, slots in pairs(inventoryData) do
+        snapshot[bagID] = {}
+        local slotID
+        for slotID = 1, inventorySlotCounts[bagID] or #slots do
+            local item = slots[slotID]
+            if item then
+                local copy = {}
+                local key, value
+                for key, value in pairs(item) do
+                    copy[key] = value
+                end
+                snapshot[bagID][slotID] = copy
+            end
+        end
+    end
+    return snapshot
+end
 
 local function GetAnchorX(widget, point)
     local left = widget:GetLeft()
@@ -408,6 +441,20 @@ function GameTooltip:SetInventoryItem(unit, inventorySlot)
     self.inventorySlot = inventorySlot
     return bagTextures[inventorySlot] ~= nil
 end
+function GameTooltip:SetOwner(owner, anchor)
+    self.owner = owner
+    self.anchor = anchor
+end
+function GameTooltip:IsOwned(owner)
+    return self.owner == owner
+end
+function GameTooltip:SetText(value)
+    self.text = value
+    self.lines = {}
+end
+function GameTooltip:AddLine(value)
+    table.insert(self.lines, value)
+end
 SlashCmdList = {}
 StaticPopupDialogs = {}
 UISpecialFrames = {}
@@ -419,6 +466,7 @@ BANK_CONTAINER = -1
 NUM_BAG_SLOTS = 4
 NUM_BANKBAGSLOTS = 7
 NUM_BANKGENERIC_SLOTS = 28
+TRADE_GOODS = "Trade Goods"
 
 function GetScreenWidth()
     return 1920
@@ -432,12 +480,86 @@ function IsShiftKeyDown()
     return shiftKeyDown
 end
 
-function GetContainerNumFreeSlots(bagID)
-    return 10, bagTypes[bagID] or 0
+function UnitName()
+    return "Sorter"
 end
 
-function GetContainerNumSlots()
-    return 0
+function GetRealmName()
+    return "MockRealm"
+end
+
+function time()
+    return mockTime
+end
+
+function InCombatLockdown()
+    return combatLocked
+end
+
+function GetContainerNumFreeSlots(bagID)
+    local slots = inventoryData[bagID]
+    if not slots then
+        return 10, bagTypes[bagID] or 0
+    end
+    local free = 0
+    local index
+    for index = 1, inventorySlotCounts[bagID] or #slots do
+        if not slots[index] then
+            free = free + 1
+        end
+    end
+    return free, bagTypes[bagID] or 0
+end
+
+function GetContainerNumSlots(bagID)
+    return inventorySlotCounts[bagID] or 0
+end
+
+function GetContainerItemInfo(bagID, slotID)
+    local source = inventoryData
+    if laggedContainerReads > 0 and laggedInventoryData then
+        source = laggedInventoryData
+        laggedContainerReads = laggedContainerReads - 1
+    end
+    local item = source[bagID] and source[bagID][slotID]
+    if not item then
+        return nil
+    end
+    local locked = item.locked and true or false
+    if postMoveLocksRemaining > 0 then
+        locked = true
+        postMoveLocksRemaining = postMoveLocksRemaining - 1
+    end
+    return item.texture or ("Item" .. tostring(item.id)),
+        item.count or 1,
+        locked,
+        item.quality,
+        false,
+        false,
+        item.link
+end
+
+function GetItemInfo(itemLink)
+    local itemID = tonumber(string.match(tostring(itemLink), "item:(%d+)"))
+    local item = itemInfoByID[itemID]
+    if not item then
+        return nil
+    end
+    return item.name,
+        item.link,
+        item.quality,
+        item.itemLevel or 1,
+        item.minimumLevel or 1,
+        item.itemType,
+        item.subType or "",
+        item.maxStack or 20,
+        item.equipLocation or "",
+        "Item" .. tostring(itemID),
+        0
+end
+
+function UnitLevel()
+    return 80
 end
 
 function ContainerIDToInventoryID(bagID)
@@ -472,6 +594,41 @@ function PlaySound(sound)
     playedSound = sound
 end
 
+function PickupContainerItem(bagID, slotID)
+    local slots = assert(inventoryData[bagID], "unknown mock bag")
+    if not containerCursor then
+        pickupSnapshot = SnapshotInventory()
+        containerCursor = slots[slotID]
+        slots[slotID] = nil
+    else
+        local displaced = slots[slotID]
+        if displaced
+            and containerCursor
+            and displaced.id == containerCursor.id
+            and (displaced.count or 1) < 20
+        then
+            local room = 20 - (displaced.count or 1)
+            local moved = math.min(room, containerCursor.count or 1)
+            displaced.count = (displaced.count or 1) + moved
+            containerCursor.count = (containerCursor.count or 1) - moved
+            slots[slotID] = displaced
+            if containerCursor.count <= 0 then
+                containerCursor = nil
+            end
+        else
+            slots[slotID] = containerCursor
+            containerCursor = displaced
+        end
+    end
+    cursorHasItem = containerCursor ~= nil
+    if not cursorHasItem and pickupSnapshot then
+        laggedInventoryData = pickupSnapshot
+        laggedContainerReads = laggedReadsAfterMove
+        postMoveLocksRemaining = postMoveLockReads
+        pickupSnapshot = nil
+    end
+end
+
 bit = {
     band = function(left, right)
         local result = 0
@@ -491,6 +648,7 @@ bit = {
 }
 
 dofile(sourceDirectory .. "/RaidThreeBags.lua")
+dofile(sourceDirectory .. "/RaidThreeUIStyle.lua")
 dofile(sourceDirectory .. "/RTB_UI.lua")
 dofile(sourceDirectory .. "/RTB_Bank.lua")
 
@@ -577,6 +735,771 @@ assert(
     "character bag tooltip uses the wrong inventory slot"
 )
 
+local function MockInventoryItem(
+    itemID,
+    name,
+    quality,
+    itemType,
+    count,
+    maxStack,
+    subType,
+    itemLevel,
+    minimumLevel,
+    equipLocation
+)
+    local link = "|cffaaaaaa|Hitem:"
+        .. tostring(itemID)
+        .. ":0:0:0:0:0:0:0|h["
+        .. name
+        .. "]|h|r"
+    itemInfoByID[itemID] = {
+        name = name,
+        link = link,
+        quality = quality,
+        itemType = itemType,
+        maxStack = maxStack or 20,
+        subType = subType or "",
+        itemLevel = itemLevel or 1,
+        minimumLevel = minimumLevel or 1,
+        equipLocation = equipLocation or ""
+    }
+    return {
+        id = itemID,
+        link = link,
+        quality = quality,
+        count = count or 1
+    }
+end
+
+bagTypes[0] = 0
+inventorySlotCounts[0] = 12
+inventoryData[0] = {
+    MockInventoryItem(220, "Alpha Misc", 4, "Miscellaneous"),
+    MockInventoryItem(221, "Alpha Trade", 4, TRADE_GOODS),
+    MockInventoryItem(222, "Boot Armor", 4, "Armor", 1, 1,
+        "Plate", 200, 1, "INVTYPE_FEET"),
+    MockInventoryItem(223, "Helm Armor", 1, "Armor", 1, 1,
+        "Plate", 1, 1, "INVTYPE_HEAD"),
+    MockInventoryItem(224, "Weapon", 1, "Weapon", 1, 1,
+        "Sword", 1, 1, "INVTYPE_WEAPON"),
+    MockInventoryItem(225, "A Unusable Potion", 4, "Consumable", 1, 1,
+        "Potion", 300, 81),
+    MockInventoryItem(226, "Z Usable Potion", 2, "Consumable", 1, 1,
+        "Potion", 10, 1),
+    MockInventoryItem(227, "A Better Potion", 3, "Consumable", 1, 1,
+        "Potion", 5, 1),
+    MockInventoryItem(228, "Z Better Potion", 3, "Consumable", 1, 1,
+        "Potion", 20, 1),
+    MockInventoryItem(229, "Elixir", 1, "Consumable", 1, 1,
+        "Elixir", 1, 1),
+    MockInventoryItem(230, "Quest", 1, "Quest"),
+    nil
+}
+local hierarchyPools = assert(RTB:BuildInventorySortPlan(mockTime - 1))
+local expectedHierarchy = {
+    "230", "229", "228", "227", "226", "225",
+    "224", "223", "222", "221", "220", false
+}
+local hierarchyIndex
+for hierarchyIndex = 1, #expectedHierarchy do
+    assert(
+        hierarchyPools[1].desired[hierarchyIndex]
+            == expectedHierarchy[hierarchyIndex],
+        "smart hierarchy mismatch at slot " .. tostring(hierarchyIndex)
+    )
+end
+
+bagTypes[0] = 0
+inventorySlotCounts[0] = 12
+inventoryData[0] = {
+    MockInventoryItem(201, "Young Potion", 1, "Consumable"),
+    MockInventoryItem(202, "Zebra Relic", 1, "Miscellaneous"),
+    MockInventoryItem(203, "Zinc Ore", 1, TRADE_GOODS),
+    MockInventoryItem(204, "Zesty Goo", 0, "Miscellaneous"),
+    nil,
+    MockInventoryItem(205, "Broken Cog", 0, "Miscellaneous"),
+    MockInventoryItem(206, "Ancient Note", 1, "Miscellaneous"),
+    MockInventoryItem(207, "Adamantite Ore", 1, TRADE_GOODS),
+    MockInventoryItem(208, "Copper Thread", 1, TRADE_GOODS),
+    MockInventoryItem(209, "Almost Old Charm", 1, "Miscellaneous"),
+    nil,
+    nil
+}
+
+RTB:UpdateItemAgeTracking(mockTime)
+local ageStore = assert(RTB:GetCharacterItemAgeStore())
+ageStore["202"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS - 10
+ageStore["206"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS
+ageStore["208"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS - 100
+ageStore["209"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS + 1
+
+local pools = assert(RTB:BuildInventorySortPlan(mockTime))
+assert(#pools == 1, "general inventory must use one safe sorting pool")
+assert(
+    pools[1].requiredSeparators == 2,
+    "three present groups must reserve two separators"
+)
+local expectedPlan = {
+    "205",
+    "204",
+    false,
+    "201",
+    "207",
+    "208",
+    "203",
+    "209",
+    false,
+    false,
+    "206",
+    "202"
+}
+local planIndex
+for planIndex = 1, #expectedPlan do
+    assert(
+        pools[1].desired[planIndex] == expectedPlan[planIndex],
+        "inventory sort plan mismatch at slot " .. tostring(planIndex)
+    )
+end
+
+local sortButton = RTB:CreateInventorySortButton()
+assert(sortButton.width == 30 and sortButton.height == 30,
+    "inventory sort button must match the 30 px bag controls")
+assert(
+    sortButton.parent == RTB.InventoryBagBar
+        and sortButton.point[1] == "RIGHT"
+        and sortButton.point[2] == RTB.InventoryBagBar
+        and sortButton.point[3] == "RIGHT"
+        and sortButton.point[4] == 0
+        and sortButton.point[5] == 0,
+    "inventory sort button is not aligned at the right edge"
+)
+assert(
+    RTB.InventorySortFrame == nil
+        and RTB.InventorySortCaption == nil
+        and RTB.InventorySortSeparator == nil,
+    "obsolete settings mini-panel returned"
+)
+assert(sortButton.rtbLabel.text == "A-Z",
+    "inventory sort button label mismatch")
+sortButton.scripts.OnEnter(sortButton)
+assert(
+    string.find(GameTooltip.lines[1], "Three smart groups", 1, true)
+        and string.find(GameTooltip.lines[1], "current/keep", 1, true)
+        and string.find(GameTooltip.lines[1], "old/review", 1, true),
+    "inventory sort tooltip does not explain the three semantic groups"
+)
+assert(
+    string.find(GameTooltip.lines[2], "category, subtype", 1, true)
+        and string.find(GameTooltip.lines[3], "Extra empty", 1, true)
+        and string.find(GameTooltip.lines[4], "consolidate", 1, true),
+    "inventory sort tooltip does not explain separators and consolidation"
+)
+sortButton.scripts.OnClick()
+assert(RTB.SortSession, "inventory sorting did not start asynchronously")
+
+local function RunInventorySort()
+    local guard = 0
+    while RTB.SortSession and guard < 400 do
+        guard = guard + 1
+        RTB.InventorySortDriver.scripts.OnUpdate(
+            RTB.InventorySortDriver,
+            0.10
+        )
+    end
+    assert(not RTB.SortSession, "inventory sorting did not finish")
+end
+
+RunInventorySort()
+
+local expectedSortedIDs = {
+    205,
+    204,
+    nil,
+    201,
+    207,
+    208,
+    203,
+    209,
+    nil,
+    nil,
+    206,
+    202
+}
+for planIndex = 1, 12 do
+    local item = inventoryData[0][planIndex]
+    local actualID = item and item.id or nil
+    assert(
+        actualID == expectedSortedIDs[planIndex],
+        "inventory move result mismatch at slot "
+            .. tostring(planIndex)
+            .. ": expected "
+            .. tostring(expectedSortedIDs[planIndex])
+            .. ", got "
+            .. tostring(actualID)
+            .. ", last message "
+            .. tostring(chatMessages[#chatMessages])
+    )
+end
+assert(
+    ageStore["202"].firstSeen
+        == mockTime - RTB.ITEM_AGE_SECONDS - 10,
+    "sorting reset the continuously-held item age"
+)
+assert(not cursorHasItem, "inventory sorting left an item on the cursor")
+assert(
+    string.find(chatMessages[#chatMessages], "Inventory arranged", 1, true),
+    "inventory sorting did not report completion"
+)
+
+local sortTraceStore = assert(RTB:GetInventorySortTraceStore())
+local completedTrace = assert(sortTraceStore.sessions[#sortTraceStore.sessions])
+assert(
+    sortTraceStore.enabled
+        and completedTrace.schema == RTB.SORT_TRACE_SCHEMA
+        and completedTrace.status == "PASS"
+        and completedTrace.finishedAt
+        and completedTrace.initialPlan
+        and completedTrace.finalPlan
+        and completedTrace.before
+        and completedTrace.after,
+    "successful sort trace was not persisted with complete lifecycle data"
+)
+assert(
+    completedTrace.initialPlan.items["205"].group == "trash"
+        and completedTrace.initialPlan.items["207"].group == "current"
+        and completedTrace.initialPlan.items["202"].group == "old"
+        and completedTrace.initialPlan.items["202"].ageSeconds
+            >= RTB.ITEM_AGE_SECONDS,
+    "sort trace did not persist classification reasons and item age"
+)
+assert(
+    #completedTrace.events > 0
+        and completedTrace.events[1].kind == "arrange"
+        and completedTrace.events[1].result == "CONFIRMED"
+        and completedTrace.events[1].source
+        and completedTrace.events[1].target,
+    "sort trace did not persist confirmed move details"
+)
+local completedVerdict = completedTrace.verdict
+assert(
+    completedVerdict.countsConserved
+        and completedVerdict.poolIsolation
+        and completedVerdict.planMatches
+        and completedVerdict.groupOrder
+        and completedVerdict.hierarchical
+        and completedVerdict.separators
+        and completedVerdict.oldAtBottom
+        and completedVerdict.cursorEmpty
+        and completedVerdict.topologyStable
+        and completedVerdict.completeSnapshots
+        and completedVerdict.snapshotCounts,
+    "successful sort trace invariant verdict was incomplete"
+)
+local originalTrashCount = completedTrace.after.counts["205"]
+completedTrace.after.counts["205"] = originalTrashCount + 1
+local badCountVerdict, badCountPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not badCountPassed and not badCountVerdict.countsConserved,
+    "sort trace verifier accepted changed item totals"
+)
+completedTrace.after.counts["205"] = originalTrashCount
+local originalFirstKey = completedTrace.after.slots[1].itemKey
+completedTrace.after.slots[1].itemKey = "unexpected"
+local badPlanVerdict, badPlanPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not badPlanPassed and not badPlanVerdict.planMatches,
+    "sort trace verifier accepted a final slot outside the plan"
+)
+completedTrace.after.slots[1].itemKey = originalFirstKey
+local omittedEmptySlot = table.remove(completedTrace.after.slots, 3)
+local missingSlotVerdict, missingSlotPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not missingSlotPassed
+        and not missingSlotVerdict.planMatches
+        and not missingSlotVerdict.completeSnapshots,
+    "sort trace verifier accepted an omitted planned empty slot"
+)
+table.insert(completedTrace.after.slots, 3, omittedEmptySlot)
+local oldBottomSlots = completedTrace.after.slots
+local finalDesired = completedTrace.finalPlan.pools[1].desired
+local savedSlot10Key = oldBottomSlots[10].itemKey
+local savedSlot10Count = oldBottomSlots[10].count
+local savedSlot11Key = oldBottomSlots[11].itemKey
+local savedSlot11Count = oldBottomSlots[11].count
+local savedSlot12Key = oldBottomSlots[12].itemKey
+local savedSlot12Count = oldBottomSlots[12].count
+local savedDesired10 = finalDesired[10]
+local savedDesired11 = finalDesired[11]
+local savedDesired12 = finalDesired[12]
+oldBottomSlots[10].itemKey = savedSlot11Key
+oldBottomSlots[10].count = savedSlot11Count
+oldBottomSlots[11].itemKey = savedSlot12Key
+oldBottomSlots[11].count = savedSlot12Count
+oldBottomSlots[12].itemKey = false
+oldBottomSlots[12].count = 0
+finalDesired[10] = savedDesired11
+finalDesired[11] = savedDesired12
+finalDesired[12] = false
+local trailingEmptyVerdict, trailingEmptyPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not trailingEmptyPassed
+        and trailingEmptyVerdict.planMatches
+        and trailingEmptyVerdict.hierarchical
+        and not trailingEmptyVerdict.oldAtBottom,
+    "sort trace verifier accepted empty space below old/review"
+)
+oldBottomSlots[10].itemKey = savedSlot10Key
+oldBottomSlots[10].count = savedSlot10Count
+oldBottomSlots[11].itemKey = savedSlot11Key
+oldBottomSlots[11].count = savedSlot11Count
+oldBottomSlots[12].itemKey = savedSlot12Key
+oldBottomSlots[12].count = savedSlot12Count
+finalDesired[10] = savedDesired10
+finalDesired[11] = savedDesired11
+finalDesired[12] = savedDesired12
+local tracePlanSlots = completedTrace.finalPlan.pools[1].slots
+local savedPlanBag2 = tracePlanSlots[2].bagID
+local savedPlanSlot2 = tracePlanSlots[2].slotID
+local savedDuplicateDesired2 = finalDesired[2]
+tracePlanSlots[2].bagID = tracePlanSlots[1].bagID
+tracePlanSlots[2].slotID = tracePlanSlots[1].slotID
+finalDesired[2] = finalDesired[1]
+local duplicatePlanVerdict, duplicatePlanPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not duplicatePlanPassed
+        and not duplicatePlanVerdict.planMatches
+        and not duplicatePlanVerdict.completeSnapshots,
+    "sort trace verifier accepted duplicate planned slot coordinates"
+)
+tracePlanSlots[2].bagID = savedPlanBag2
+tracePlanSlots[2].slotID = savedPlanSlot2
+finalDesired[2] = savedDuplicateDesired2
+finalDesired[#tracePlanSlots + 1] = false
+local extraDesiredVerdict, extraDesiredPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not extraDesiredPassed
+        and not extraDesiredVerdict.planMatches
+        and not extraDesiredVerdict.completeSnapshots,
+    "sort trace verifier accepted surplus desired plan entries"
+)
+finalDesired[#tracePlanSlots + 1] = nil
+finalDesired.forged = "forged-extra"
+local keyedDesiredVerdict, keyedDesiredPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not keyedDesiredPassed
+        and not keyedDesiredVerdict.planMatches
+        and not keyedDesiredVerdict.completeSnapshots,
+    "sort trace verifier accepted keyed desired plan entries"
+)
+finalDesired.forged = nil
+local savedOccupiedCount = completedTrace.after.slots[1].count
+completedTrace.after.slots[1].count = 0
+local zeroCountVerdict, zeroCountPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not zeroCountPassed and not zeroCountVerdict.snapshotCounts,
+    "sort trace verifier normalized an invalid occupied count"
+)
+completedTrace.after.slots[1].count = savedOccupiedCount
+local savedBeforePools = {}
+local savedAfterPools = {}
+local traceSlotIndex
+for traceSlotIndex = 1, #completedTrace.before.slots do
+    savedBeforePools[traceSlotIndex] =
+        completedTrace.before.slots[traceSlotIndex].pool
+    completedTrace.before.slots[traceSlotIndex].pool = "fake"
+end
+for traceSlotIndex = 1, #completedTrace.after.slots do
+    savedAfterPools[traceSlotIndex] =
+        completedTrace.after.slots[traceSlotIndex].pool
+    completedTrace.after.slots[traceSlotIndex].pool = "fake"
+end
+local savedBeforePoolCounts = completedTrace.before.poolCounts
+local savedAfterPoolCounts = completedTrace.after.poolCounts
+completedTrace.before.poolCounts = { fake = completedTrace.before.counts }
+completedTrace.after.poolCounts = { fake = completedTrace.after.counts }
+local fakePoolVerdict, fakePoolPassed =
+    RTB:VerifyInventorySortTrace(completedTrace)
+assert(
+    not fakePoolPassed
+        and not fakePoolVerdict.poolIsolation
+        and fakePoolVerdict.snapshotCounts,
+    "sort trace verifier trusted forged snapshot pool labels"
+)
+for traceSlotIndex = 1, #completedTrace.before.slots do
+    completedTrace.before.slots[traceSlotIndex].pool =
+        savedBeforePools[traceSlotIndex]
+end
+for traceSlotIndex = 1, #completedTrace.after.slots do
+    completedTrace.after.slots[traceSlotIndex].pool =
+        savedAfterPools[traceSlotIndex]
+end
+completedTrace.before.poolCounts = savedBeforePoolCounts
+completedTrace.after.poolCounts = savedAfterPoolCounts
+RTB:InitializeDB()
+assert(
+    RTB:GetInventorySortTraceStore().sessions[#sortTraceStore.sessions]
+        == completedTrace,
+    "sort trace did not survive SavedVariables DB reinitialization"
+)
+
+inventorySlotCounts[0] = 2
+inventoryData[0] = {
+    MockInventoryItem(402, "Zulu Token", 1, "Miscellaneous"),
+    MockInventoryItem(401, "Alpha Token", 1, "Miscellaneous")
+}
+inventorySlotCounts[1] = 0
+inventoryData[1] = {}
+laggedReadsAfterMove = 1
+postMoveLockReads = 4
+assert(
+    RTB:SortInventory(),
+    "sort with split stale reads and post-move locks did not start"
+)
+RunInventorySort()
+assert(
+    inventoryData[0][1].id == 401
+        and inventoryData[0][2].id == 402
+        and string.find(chatMessages[#chatMessages], "Inventory arranged", 1, true),
+    "split stale reads or post-move locks aborted a valid move"
+)
+laggedReadsAfterMove = 2
+postMoveLockReads = 0
+postMoveLocksRemaining = 0
+
+local linklessAge = ageStore["402"] and ageStore["402"].firstSeen
+inventoryData[0][2].link = nil
+assert(
+    not RTB:UpdateItemAgeTracking(mockTime + 1)
+        and ageStore["402"]
+        and ageStore["402"].firstSeen == linklessAge,
+    "occupied linkless slot pruned or reset item age"
+)
+local linklessPlan, linklessReason = RTB:BuildInventorySortPlan(mockTime + 1)
+assert(
+    linklessPlan == nil
+        and string.find(linklessReason, "still loading", 1, true),
+    "occupied linkless slot was treated as empty"
+)
+inventoryData[0][2].link = itemInfoByID[402].link
+
+local topologyFirstID = inventoryData[0][1].id
+local topologySecondID = inventoryData[0][2].id
+assert(RTB:SortInventory(), "topology guard test did not start")
+bagTypes[1] = 8
+RunInventorySort()
+assert(
+    inventoryData[0][1].id == topologyFirstID
+        and inventoryData[0][2].id == topologySecondID
+        and string.find(chatMessages[#chatMessages], "Bag layout changed", 1, true),
+    "bag topology changed without stopping before a physical move"
+)
+bagTypes[1] = 4
+
+local function InventoryFingerprint()
+    local parts = {}
+    local fingerprintBagID
+    for fingerprintBagID = 0, 4 do
+        local slotID
+        for slotID = 1, inventorySlotCounts[fingerprintBagID] or 0 do
+            local item = inventoryData[fingerprintBagID]
+                and inventoryData[fingerprintBagID][slotID]
+            table.insert(
+                parts,
+                tostring(fingerprintBagID)
+                    .. ":"
+                    .. tostring(slotID)
+                    .. "="
+                    .. tostring(item and item.id or "empty")
+                    .. ":"
+                    .. tostring(item and item.count or 0)
+            )
+        end
+    end
+    return table.concat(parts, "|")
+end
+
+inventorySlotCounts[0] = 3
+inventoryData[0] = {
+    MockInventoryItem(301, "Broken Gear", 0, "Miscellaneous", 1, 1),
+    MockInventoryItem(302, "Current Tonic", 1, "Consumable", 1, 1),
+    MockInventoryItem(303, "Old Relic", 1, "Miscellaneous", 1, 1)
+}
+inventorySlotCounts[1] = 0
+inventoryData[1] = {}
+RTB:UpdateItemAgeTracking(mockTime)
+ageStore["303"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS
+local blockedFingerprint = InventoryFingerprint()
+local blockedPlan, blockedReason = RTB:BuildInventorySortPlan(mockTime)
+assert(
+    blockedPlan == nil
+        and string.find(blockedReason, "stack capacity", 1, true),
+    "insufficient separator capacity was not rejected"
+)
+assert(
+    not RTB:SortInventory()
+        and InventoryFingerprint() == blockedFingerprint,
+    "insufficient capacity changed inventory before refusal"
+)
+local blockedTrace = sortTraceStore.sessions[#sortTraceStore.sessions]
+assert(
+    blockedTrace.status == "ABORTED"
+        and string.find(blockedTrace.reason, "stack capacity", 1, true),
+    "preflight refusal was not persisted as an aborted sort trace"
+)
+
+inventorySlotCounts[0] = 6
+inventoryData[0] = {
+    MockInventoryItem(312, "Copper Thread", 1, TRADE_GOODS, 5),
+    MockInventoryItem(314, "Ancient Relic", 1, "Miscellaneous", 6),
+    MockInventoryItem(311, "Broken Gear", 0, "Miscellaneous", 1, 1),
+    MockInventoryItem(313, "Young Tonic", 1, "Consumable", 1, 1),
+    MockInventoryItem(314, "Ancient Relic", 1, "Miscellaneous", 6),
+    MockInventoryItem(312, "Copper Thread", 1, TRADE_GOODS, 5)
+}
+RTB:UpdateItemAgeTracking(mockTime)
+ageStore["314"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS - 1
+local consolidationPlan = assert(RTB:BuildInventorySortPlan(mockTime))
+assert(
+    consolidationPlan[1].requiredSeparators == 2
+        and consolidationPlan[1].freeableSlots == 2
+        and consolidationPlan[1].needsConsolidation,
+    "partial-stack simulation did not prove two freeable slots"
+)
+assert(RTB:SortInventory(), "safe partial-stack consolidation did not start")
+local oneClickSession = RTB.SortSession
+assert(
+    oneClickSession and oneClickSession.phase == "consolidate",
+    "sort session did not enter pre-sort consolidation"
+)
+RunInventorySort()
+assert(not cursorHasItem, "consolidation left an item on the cursor")
+assert(
+    inventoryData[0][1].id == 311
+        and inventoryData[0][2] == nil
+        and inventoryData[0][3].id == 313
+        and inventoryData[0][4].id == 312
+        and inventoryData[0][4].count == 10
+        and inventoryData[0][5] == nil
+        and inventoryData[0][6].id == 314
+        and inventoryData[0][6].count == 12,
+    "one-session consolidation and three-group arrangement failed: "
+        .. InventoryFingerprint()
+)
+assert(
+    string.find(chatMessages[#chatMessages], "Inventory arranged", 1, true),
+    "partial-stack consolidation required a second sort session"
+)
+
+inventorySlotCounts[0] = 3
+inventoryData[0] = {
+    MockInventoryItem(321, "Broken Part", 0, "Miscellaneous", 1, 1),
+    MockInventoryItem(322, "Shared Dust", 1, TRADE_GOODS, 5),
+    MockInventoryItem(323, "Old Token", 1, "Miscellaneous", 1, 1)
+}
+inventorySlotCounts[1] = 2
+inventoryData[1] = {
+    MockInventoryItem(322, "Shared Dust", 1, TRADE_GOODS, 5),
+    MockInventoryItem(322, "Shared Dust", 1, TRADE_GOODS, 5)
+}
+RTB:UpdateItemAgeTracking(mockTime)
+ageStore["323"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS
+local familyFingerprint = InventoryFingerprint()
+assert(
+    not RTB:SortInventory()
+        and InventoryFingerprint() == familyFingerprint
+        and inventoryData[0][2].count == 5
+        and inventoryData[1][1].count == 5
+        and inventoryData[1][2].count == 5,
+    "same item key crossed compatible bag-family movement pools"
+)
+
+inventorySlotCounts[0] = 4
+inventoryData[0] = {
+    [3] = MockInventoryItem(331, "Young Item", 1, "Miscellaneous")
+}
+inventorySlotCounts[1] = 2
+inventoryData[1] = {
+    MockInventoryItem(332, "Zesty Shard", 1, TRADE_GOODS),
+    MockInventoryItem(333, "Azure Shard", 1, TRADE_GOODS)
+}
+local familyPools = assert(RTB:BuildInventorySortPlan(mockTime))
+assert(#familyPools == 2, "specialty bag family was not isolated")
+assert(
+    familyPools[1].desired[1] == "331"
+        and familyPools[1].desired[2] == false
+        and familyPools[1].desired[3] == false
+        and familyPools[1].desired[4] == false,
+    "surplus empties did not follow current/keep when old/review was absent"
+)
+assert(RTB:SortInventory(), "specialty bag sort failed")
+RunInventorySort()
+assert(
+    inventoryData[0][1].id == 331
+        and inventoryData[0][2] == nil
+        and inventoryData[0][3] == nil
+        and inventoryData[0][4] == nil
+        and inventoryData[1][1].id == 333
+        and inventoryData[1][2].id == 332,
+    "specialty bag sort crossed or misordered its family pool"
+)
+
+inventoryData[1][1].locked = true
+local lockedPlan, lockedReason = RTB:BuildInventorySortPlan(mockTime)
+assert(
+    lockedPlan == nil
+        and string.find(lockedReason, "locked", 1, true),
+    "locked inventory item did not block sorting"
+)
+inventoryData[1][1].locked = false
+
+local cachedInfo = itemInfoByID[333]
+itemInfoByID[333] = nil
+local uncachedPlan, uncachedReason = RTB:BuildInventorySortPlan(mockTime)
+assert(
+    uncachedPlan == nil
+        and string.find(uncachedReason, "still loading", 1, true),
+    "uncached item information did not block sorting"
+)
+itemInfoByID[333] = cachedInfo
+
+cursorHasItem = true
+assert(not RTB:SortInventory(), "held cursor item did not block sorting")
+cursorHasItem = false
+combatLocked = true
+assert(not RTB:SortInventory(), "combat did not block sorting")
+combatLocked = false
+
+inventorySlotCounts[0] = 2
+inventoryData[0] = {
+    MockInventoryItem(402, "Zulu Token", 1, "Miscellaneous"),
+    MockInventoryItem(401, "Alpha Token", 1, "Miscellaneous")
+}
+inventorySlotCounts[1] = 0
+inventoryData[1] = {}
+local originalPickupContainerItem = PickupContainerItem
+PickupContainerItem = function()
+end
+assert(RTB:SortInventory(), "failed native pickup trace did not start")
+RunInventorySort()
+PickupContainerItem = originalPickupContainerItem
+local failedPickupTrace = sortTraceStore.sessions[#sortTraceStore.sessions]
+assert(
+    failedPickupTrace.status == "ABORTED"
+        and #failedPickupTrace.events == 1
+        and failedPickupTrace.events[1].result == "FAILED"
+        and failedPickupTrace.events[1].source
+        and failedPickupTrace.events[1].target,
+    "failed native pickup was omitted from the sort trace"
+)
+
+SlashCmdList.RAIDTHREEBAGS("sortlog status")
+assert(
+    string.find(chatMessages[#chatMessages], "Sort log ON", 1, true),
+    "sortlog status did not report enabled persistent logging"
+)
+SlashCmdList.RAIDTHREEBAGS("sortlog last")
+assert(
+    string.find(chatMessages[#chatMessages], "Sort log reason", 1, true),
+    "sortlog last did not report the last aborted reason"
+)
+SlashCmdList.RAIDTHREEBAGS("sortlog off")
+local disabledSessionCount = #sortTraceStore.sessions
+assert(RTB:SortInventory(), "sort did not start with logging disabled")
+RunInventorySort()
+assert(
+    #sortTraceStore.sessions == disabledSessionCount,
+    "disabled sort logging persisted a new session"
+)
+SlashCmdList.RAIDTHREEBAGS("sortlog on")
+local stressIndex
+for stressIndex = 1, RTB.SORT_TRACE_MAX_SESSIONS + 1 do
+    assert(RTB:SortInventory(), "bounded sort trace test did not start")
+    RunInventorySort()
+end
+assert(
+    #sortTraceStore.sessions == RTB.SORT_TRACE_MAX_SESSIONS
+        and sortTraceStore.sessions[1].id
+            == sortTraceStore.nextSessionID - RTB.SORT_TRACE_MAX_SESSIONS
+        and sortTraceStore.sessions[#sortTraceStore.sessions].id
+            == sortTraceStore.nextSessionID - 1,
+    "sort trace ring did not retain exactly the latest ten sessions"
+)
+SlashCmdList.RAIDTHREEBAGS("sortlog last")
+assert(
+    string.find(chatMessages[#chatMessages], "Sort log #", 1, true)
+        and string.find(chatMessages[#chatMessages], "PASS", 1, true),
+    "sortlog last did not print the latest successful verdict"
+)
+SlashCmdList.RAIDTHREEBAGS("sortlog clear")
+assert(
+    #sortTraceStore.sessions == 0
+        and string.find(chatMessages[#chatMessages], "cleared", 1, true),
+    "sortlog clear did not remove retained sessions"
+)
+sortTraceStore.sessions = {
+    "invalid",
+    { status = "PASS" },
+    { id = 41, status = "RUNNING", verdict = 42, events = "invalid" },
+    { id = 42, status = "PASS" }
+}
+sortTraceStore.nextSessionID = 1
+sortTraceStore.enabled = "invalid"
+RTB:InitializeDB()
+local sanitizedTraceStore = RTB:GetInventorySortTraceStore()
+assert(
+    sanitizedTraceStore.enabled
+        and #sanitizedTraceStore.sessions == 2
+        and sanitizedTraceStore.sessions[1].id == 41
+        and sanitizedTraceStore.sessions[1].status == "ABORTED"
+        and type(sanitizedTraceStore.sessions[1].events) == "table"
+        and sanitizedTraceStore.sessions[1].verdict == nil
+        and sanitizedTraceStore.sessions[2].id == 42
+        and sanitizedTraceStore.nextSessionID == 43,
+    "legacy or corrupted sort trace store was not sanitized"
+)
+sanitizedTraceStore.sessions = {}
+sanitizedTraceStore.nextSessionID = "1.5"
+assert(
+    RTB:GetInventorySortTraceStore().nextSessionID == 1,
+    "fractional sort trace session ID was not normalized"
+)
+sanitizedTraceStore.nextSessionID = math.huge
+assert(
+    RTB:GetInventorySortTraceStore().nextSessionID == 1,
+    "non-finite sort trace session ID was not rejected"
+)
+sanitizedTraceStore.sessions = {
+    [100] = { id = 50, status = "PASS" },
+    junk = { id = 51, status = "PASS" }
+}
+sanitizedTraceStore.nextSessionID = 1
+local denseTraceStore = RTB:GetInventorySortTraceStore()
+assert(
+    #denseTraceStore.sessions == 1
+        and denseTraceStore.sessions[1].id == 50
+        and denseTraceStore.nextSessionID == 51,
+    "sparse or keyed sort trace entries were not rebuilt densely"
+)
+denseTraceStore.sessions = {}
+denseTraceStore.nextSessionID = 100000000000000000000
+local largeIDTraceOne = assert(RTB:BeginInventorySortTrace())
+local largeIDTraceTwo = assert(RTB:BeginInventorySortTrace())
+assert(
+    largeIDTraceOne.id == 1
+        and largeIDTraceTwo.id == 2
+        and largeIDTraceOne.id ~= largeIDTraceTwo.id,
+    "oversized sort trace IDs were not safely rebased"
+)
+denseTraceStore.sessions = {}
+
 local brandingWindow = NewWidget("Frame", "BrandingWindow", UIParent)
 brandingWindow:SetWidth(480)
 brandingWindow:SetHeight(500)
@@ -636,9 +1559,9 @@ assert(
     "footer brand edition text mismatch"
 )
 assert(
-    footerBrand.rtbCredit.textColor[1] == 0.74
-        and footerBrand.rtbCredit.textColor[2] == 0.74
-        and footerBrand.rtbCredit.textColor[3] == 0.80,
+    footerBrand.rtbCredit.textColor[1] == 0.72
+        and footerBrand.rtbCredit.textColor[2] == 0.76
+        and footerBrand.rtbCredit.textColor[3] == 0.82,
     "footer brand credit color mismatch"
 )
 assert(

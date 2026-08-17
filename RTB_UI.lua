@@ -5,6 +5,10 @@
 -- ============================================================
 
 local RTB = RaidThreeBags
+local Style = assert(
+    RaidThreeUIStyle,
+    "RaidThreeUIStyle must load before RTB_UI.lua"
+)
 
 local ITEM_SIZE = 36
 local ITEM_SPACING = 4
@@ -59,32 +63,6 @@ local CORNER_LOCK_PAIRS = {
     { "TOPRIGHT", "BOTTOMRIGHT" },
     { "BOTTOMLEFT", "TOPLEFT" },
     { "BOTTOMRIGHT", "TOPRIGHT" }
-}
-
-local WINDOW_BACKDROP = {
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true,
-    tileSize = 32,
-    edgeSize = 32,
-    insets = { left = 11, right = 12, top = 12, bottom = 11 }
-}
-
-local PANEL_BACKDROP = {
-    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true,
-    tileSize = 16,
-    edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 }
-}
-
-local BAG_SLOT_BACKDROP = {
-    bgFile = "Interface\\Buttons\\UI-EmptySlot",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = false,
-    edgeSize = 10,
-    insets = { left = 2, right = 2, top = 2, bottom = 2 }
 }
 
 local EMPTY_SLOT_COLORS = {
@@ -220,7 +198,7 @@ function RTB:CreateFooterBrand(window, leftBoundary, rightBoundary)
     credit:SetWidth(FOOTER_BRAND_MAX_WIDTH)
     credit:SetJustifyH("CENTER")
     credit:SetText(FOOTER_BRAND_CREDIT)
-    credit:SetTextColor(0.74, 0.74, 0.80)
+    Style:ApplyText(credit, "bodySmall")
     brand.rtbCredit = credit
 
     local edition = brand:CreateFontString(
@@ -232,7 +210,7 @@ function RTB:CreateFooterBrand(window, leftBoundary, rightBoundary)
     edition:SetWidth(FOOTER_BRAND_MAX_WIDTH)
     edition:SetJustifyH("CENTER")
     edition:SetText(FOOTER_BRAND_EDITION)
-    edition:SetTextColor(0.55, 0.75, 1)
+    edition:SetTextColor(Style:GetColor("accent"))
     brand.rtbEdition = edition
 
     local creditFont, creditSize, creditFlags = credit:GetFont()
@@ -758,8 +736,7 @@ function RTB:CreateWindow(frameName, width, height, titleText)
     window:EnableMouse(true)
     window:RegisterForDrag("LeftButton")
     window:SetClampedToScreen(true)
-    window:SetBackdrop(WINDOW_BACKDROP)
-    window:SetBackdropColor(0, 0, 0, 0.95)
+    Style:ApplyBackdrop(window, "window")
     window:SetFrameStrata("HIGH")
     window:SetToplevel(true)
     window:Hide()
@@ -774,20 +751,20 @@ function RTB:CreateWindow(frameName, width, height, titleText)
 
     local windowHeaderBg = windowHeader:CreateTexture(nil, "BACKGROUND")
     windowHeaderBg:SetAllPoints(windowHeader)
-    windowHeaderBg:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-    windowHeaderBg:SetVertexColor(0.08, 0.08, 0.12, 0.95)
+    windowHeaderBg:SetTexture(Style.TEXTURES.header)
+    windowHeaderBg:SetVertexColor(Style:GetColor("headerBackground"))
 
     local windowTopLine = window:CreateTexture(nil, "ARTWORK")
     windowTopLine:SetHeight(2)
     windowTopLine:SetPoint("TOPLEFT", 20, -42)
     windowTopLine:SetPoint("TOPRIGHT", -20, -42)
-    windowTopLine:SetTexture("Interface\\Buttons\\WHITE8X8")
-    windowTopLine:SetVertexColor(0.7, 0.85, 1, 0.35)
+    windowTopLine:SetTexture(Style.TEXTURES.white)
+    windowTopLine:SetVertexColor(Style:GetColor("separator"))
 
     local windowTitle = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     windowTitle:SetPoint("CENTER", windowHeader, "CENTER", 0, 0)
     windowTitle:SetText(titleText or "")
-    windowTitle:SetTextColor(0.85, 0.92, 1)
+    Style:ApplyText(windowTitle, "windowTitle")
 
     window.rtbHeader = windowHeader
     window.rtbTitle = windowTitle
@@ -816,42 +793,15 @@ function RTB:CreateSettingsGear(window, context)
     end
 
     local button = CreateFrame("Button", name, window)
-    button:SetWidth(30)
-    button:SetHeight(30)
+    Style:CreateSquareIconChrome(
+        button,
+        "Interface\\Icons\\Trade_Engineering"
+    )
     button:SetPoint("TOPLEFT", window, "TOPLEFT", 14, -12)
     button:SetFrameLevel(window:GetFrameLevel() + 20)
     button:SetHitRectInsets(0, 0, 0, 0)
     button:EnableMouse(true)
     button:RegisterForClicks("LeftButtonUp")
-
-    button:SetNormalTexture("Interface\\Icons\\Trade_Engineering")
-    local normal = button:GetNormalTexture()
-    normal:ClearAllPoints()
-    normal:SetWidth(16)
-    normal:SetHeight(16)
-    normal:SetPoint("CENTER", button, "CENTER", 0, 0)
-    normal:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    button:SetPushedTexture("Interface\\Icons\\Trade_Engineering")
-    local pushed = button:GetPushedTexture()
-    pushed:ClearAllPoints()
-    pushed:SetWidth(16)
-    pushed:SetHeight(16)
-    pushed:SetPoint("CENTER", button, "CENTER", 1, -1)
-    pushed:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    pushed:SetVertexColor(0.75, 0.75, 0.75)
-
-    local border = button:CreateTexture(nil, "OVERLAY")
-    border:SetWidth(26)
-    border:SetHeight(26)
-    border:SetPoint("CENTER", button, "CENTER", 0, 0)
-    border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-
-    local highlight = button:CreateTexture(nil, "HIGHLIGHT")
-    highlight:SetPoint("TOPLEFT", button, "TOPLEFT", 3, -3)
-    highlight:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -3, 3)
-    highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
-    highlight:SetBlendMode("ADD")
 
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -922,11 +872,8 @@ function RTB:CreateInventoryBagSlot(bagID)
         "RaidThreeBagsInventoryBag" .. tostring(index),
         self.InventoryBagBar
     )
-    button:SetWidth(INVENTORY_BAG_SIZE)
-    button:SetHeight(INVENTORY_BAG_SIZE)
+    Style:ApplySquareControl(button)
     button:SetID(bagID)
-    button:SetBackdrop(BAG_SLOT_BACKDROP)
-    button:SetBackdropColor(0.05, 0.05, 0.07, 0.95)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
 
@@ -936,14 +883,14 @@ function RTB:CreateInventoryBagSlot(bagID)
 
     local highlight = button:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetAllPoints(button)
-    highlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    highlight:SetTexture(Style.TEXTURES.highlight)
     highlight:SetBlendMode("ADD")
 
     local cursorHighlight = button:CreateTexture(nil, "OVERLAY")
     cursorHighlight:SetAllPoints(button)
-    cursorHighlight:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    cursorHighlight:SetTexture(Style.TEXTURES.highlight)
     cursorHighlight:SetBlendMode("ADD")
-    cursorHighlight:SetVertexColor(0.2, 1, 0.2, 0.7)
+    cursorHighlight:SetVertexColor(Style:GetColor("cursorValid"))
     cursorHighlight:Hide()
 
     button.rtbIcon = icon
@@ -989,9 +936,9 @@ function RTB:UpdateInventoryBagSlots()
         )
 
         if texture then
-            button.rtbIcon:SetVertexColor(1, 1, 1)
+            button.rtbIcon:SetVertexColor(Style:GetColor("iconNormal"))
         else
-            button.rtbIcon:SetVertexColor(0.7, 0.7, 0.7)
+            button.rtbIcon:SetVertexColor(Style:GetColor("disabledIcon"))
         end
 
         local locked = IsInventoryItemLocked(button.rtbInventorySlot)
@@ -1027,6 +974,86 @@ function RTB:LayoutInventoryBagSlots()
     end
 end
 
+function RTB:CreateInventorySortButton()
+    local button = CreateFrame(
+        "Button",
+        "RaidThreeBagsInventorySortButton",
+        self.InventoryBagBar
+    )
+    Style:ApplySquareControl(button)
+    button:RegisterForClicks("LeftButtonUp")
+    button:SetPoint("RIGHT", self.InventoryBagBar, "RIGHT", 0, 0)
+
+    local label = button:CreateFontString(
+        nil,
+        "OVERLAY",
+        "GameFontNormalSmall"
+    )
+    label:SetPoint("CENTER", button, "CENTER", 0, 0)
+    label:SetText("A-Z")
+    Style:ApplyText(label, "buttonLabel")
+
+    local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+    highlight:SetAllPoints(button)
+    highlight:SetTexture(Style.TEXTURES.highlight)
+    highlight:SetBlendMode("ADD")
+
+    button.rtbLabel = label
+    button:SetScript("OnEnter", function(self)
+        if self:GetRight() and self:GetRight() > (GetScreenWidth() / 2) then
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        else
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        end
+        GameTooltip:SetText("Arrange inventory")
+        GameTooltip:AddLine(
+            "Three smart groups: trash; current/keep (all crafting and "
+                .. "items under 24 hours); old/review (non-crafting "
+                .. "items present at least 24 hours).",
+            1,
+            1,
+            1,
+            true
+        )
+        GameTooltip:AddLine(
+            "Inside each group: category, subtype, equipment slot, "
+                .. "level usability, quality, item level, then name.",
+            0.65,
+            0.75,
+            0.85,
+            true
+        )
+        GameTooltip:AddLine(
+            "One empty separator divides each present group. Extra empty "
+                .. "slots sit before old/review.",
+            0.65,
+            0.75,
+            0.85,
+            true
+        )
+        GameTooltip:AddLine(
+            "Compatible partial stacks may consolidate inside their bag "
+                .. "family first.",
+            0.65,
+            0.75,
+            0.85,
+            true
+        )
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        if GameTooltip:IsOwned(self) then
+            GameTooltip:Hide()
+        end
+    end)
+    button:SetScript("OnClick", function()
+        RTB:SortInventory()
+    end)
+
+    self.InventorySortButton = button
+    return button
+end
+
 function RTB:GetBagParent(bagID)
     local parent = self.BagParents[bagID]
     if parent then
@@ -1059,7 +1086,7 @@ function RTB:CreateItemButton()
     qualityBorder:SetWidth(62)
     qualityBorder:SetHeight(62)
     qualityBorder:SetPoint("CENTER", button, "CENTER", 0, 0)
-    qualityBorder:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    qualityBorder:SetTexture(Style.TEXTURES.qualityBorder)
     qualityBorder:SetBlendMode("ADD")
     qualityBorder:Hide()
 
@@ -1093,7 +1120,7 @@ function RTB:UpdateItemButton(button, bagID, slotID)
     if texture then
         SetItemButtonTextureVertexColor(button, 1, 1, 1)
         if normalTexture then
-            normalTexture:SetVertexColor(1, 1, 1)
+            normalTexture:SetVertexColor(Style:GetColor("iconNormal"))
         end
     else
         local r, g, b = GetEmptySlotColor(bagType)
@@ -1330,13 +1357,12 @@ function RTB:BuildUI()
         self:CreateInventoryBagSlot(bagID)
     end
     self:LayoutInventoryBagSlots()
+    self:CreateInventorySortButton()
 
     local itemPanel = CreateFrame("Frame", nil, window)
     itemPanel:SetPoint("TOPLEFT", window, "TOPLEFT", 20, -94)
     itemPanel:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -20, 48)
-    itemPanel:SetBackdrop(PANEL_BACKDROP)
-    itemPanel:SetBackdropColor(0.02, 0.02, 0.03, 0.80)
-    itemPanel:SetBackdropBorderColor(0.30, 0.40, 0.52, 0.75)
+    Style:ApplyBackdrop(itemPanel, "panel")
     self.ItemPanel = itemPanel
 
     local scroll = CreateFrame(
@@ -1368,7 +1394,7 @@ function RTB:BuildUI()
         "GameFontHighlightSmall"
     )
     freeSlotsText:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 24, 24)
-    freeSlotsText:SetTextColor(0.78, 0.86, 0.94)
+    Style:ApplyText(freeSlotsText, "bodySmall")
     self.FreeSlotsText = freeSlotsText
 
     local columnsText = window:CreateFontString(
@@ -1377,7 +1403,7 @@ function RTB:BuildUI()
         "GameFontHighlightSmall"
     )
     columnsText:SetPoint("LEFT", freeSlotsText, "RIGHT", 14, 0)
-    columnsText:SetTextColor(0.52, 0.66, 0.80)
+    Style:ApplyText(columnsText, "muted")
     self.ColumnsText = columnsText
 
     local moneyText = window:CreateFontString(
@@ -1402,7 +1428,7 @@ function RTB:BuildUI()
 
     local gripTexture = grip:CreateTexture(nil, "ARTWORK")
     gripTexture:SetAllPoints(grip)
-    gripTexture:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    gripTexture:SetTexture(Style.TEXTURES.resize)
 
     grip:SetScript("OnMouseDown", function(_, button)
         if button == "LeftButton" then
@@ -1414,14 +1440,10 @@ function RTB:BuildUI()
         RTB:RequestLayout()
     end)
     grip:SetScript("OnEnter", function()
-        gripTexture:SetTexture(
-            "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight"
-        )
+        gripTexture:SetTexture(Style.TEXTURES.resizeHighlight)
     end)
     grip:SetScript("OnLeave", function()
-        gripTexture:SetTexture(
-            "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"
-        )
+        gripTexture:SetTexture(Style.TEXTURES.resize)
     end)
     self.ResizeGrip = grip
 
@@ -1490,9 +1512,9 @@ local function SetOnOffToggleState(button, enabled)
     local fontString = button:GetFontString()
     if fontString then
         if enabled then
-            fontString:SetTextColor(0, 1, 0)
+            fontString:SetTextColor(Style:GetColor("success"))
         else
-            fontString:SetTextColor(1, 0.2, 0.2)
+            fontString:SetTextColor(Style:GetColor("danger"))
         end
     end
 
@@ -1500,9 +1522,9 @@ local function SetOnOffToggleState(button, enabled)
     if highlight then
         highlight:SetBlendMode("ADD")
         if enabled then
-            highlight:SetVertexColor(0, 1, 0, 0.70)
+            highlight:SetVertexColor(Style:GetColor("highlightSuccess"))
         else
-            highlight:SetVertexColor(1, 0.12, 0.12, 0.75)
+            highlight:SetVertexColor(Style:GetColor("highlightDanger"))
         end
     end
 end
@@ -1567,7 +1589,6 @@ function RTB:BuildSettingsUI()
         "Raid Three Bags Settings"
     )
     window:SetFrameStrata("DIALOG")
-    window:SetBackdropColor(0, 0, 0, 0.97)
     window:SetResizable(true)
     window:SetMinResize(SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT)
     if window.SetMaxResize then
@@ -1609,9 +1630,7 @@ function RTB:BuildSettingsUI()
         -SETTINGS_CONTENT_SIDE,
         SETTINGS_CONTENT_BOTTOM
     )
-    content:SetBackdrop(PANEL_BACKDROP)
-    content:SetBackdropColor(0.03, 0.03, 0.05, 0.82)
-    content:SetBackdropBorderColor(0.30, 0.40, 0.52, 0.75)
+    Style:ApplyBackdrop(content, "panel")
     self.SettingsContent = content
 
     local layoutHeading = content:CreateFontString(
@@ -1621,7 +1640,7 @@ function RTB:BuildSettingsUI()
     )
     layoutHeading:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -13)
     layoutHeading:SetText("Window layout")
-    layoutHeading:SetTextColor(1, 0.82, 0)
+    Style:ApplyText(layoutHeading, "sectionHeading")
 
     local windowLockLabel = content:CreateFontString(
         nil,
@@ -1630,7 +1649,7 @@ function RTB:BuildSettingsUI()
     )
     windowLockLabel:SetPoint("TOPRIGHT", content, "TOPRIGHT", -94, -15)
     windowLockLabel:SetText("Corner lock")
-    windowLockLabel:SetTextColor(0.85, 0.90, 0.96)
+    Style:ApplyText(windowLockLabel, "bodySmall")
 
     local windowLock = CreateFrame(
         "Button",
@@ -1714,8 +1733,8 @@ function RTB:BuildSettingsUI()
     divider:SetHeight(1)
     divider:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -79)
     divider:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -79)
-    divider:SetTexture("Interface\\Buttons\\WHITE8X8")
-    divider:SetVertexColor(0.7, 0.85, 1, 0.24)
+    divider:SetTexture(Style.TEXTURES.white)
+    divider:SetVertexColor(Style:GetColor("separatorSoft"))
 
     local bagsHeading = content:CreateFontString(
         nil,
@@ -1724,7 +1743,7 @@ function RTB:BuildSettingsUI()
     )
     bagsHeading:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -94)
     bagsHeading:SetText("Special bag slot invisibility")
-    bagsHeading:SetTextColor(1, 0.82, 0)
+    Style:ApplyText(bagsHeading, "sectionHeading")
 
     local note = content:CreateFontString(
         nil,
@@ -1740,7 +1759,7 @@ function RTB:BuildSettingsUI()
         "Green ON keeps every slot of that equipped special bag visible. " ..
         "Red OFF hides its slots from the inventory grid."
     )
-    note:SetTextColor(0.72, 0.76, 0.82)
+    Style:ApplyText(note, "bodySmall")
 
     local typeHeader = content:CreateFontString(
         nil,
@@ -1749,7 +1768,7 @@ function RTB:BuildSettingsUI()
     )
     typeHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -150)
     typeHeader:SetText("SPECIAL BAG TYPE")
-    typeHeader:SetTextColor(0.60, 0.78, 1)
+    Style:ApplyText(typeHeader, "controlCaption")
 
     local stateHeader = content:CreateFontString(
         nil,
@@ -1758,7 +1777,7 @@ function RTB:BuildSettingsUI()
     )
     stateHeader:SetPoint("TOPRIGHT", content, "TOPRIGHT", -42, -150)
     stateHeader:SetText("VISIBLE")
-    stateHeader:SetTextColor(0.60, 0.78, 1)
+    Style:ApplyText(stateHeader, "controlCaption")
     self.SettingsStateHeader = stateHeader
 
     local tableScroll = CreateFrame(
@@ -1823,11 +1842,11 @@ function RTB:BuildSettingsUI()
 
         local background = row:CreateTexture(nil, "BACKGROUND")
         background:SetAllPoints(row)
-        background:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        background:SetTexture(Style.TEXTURES.header)
         if index % 2 == 0 then
-            background:SetVertexColor(0.10, 0.13, 0.18, 0.62)
+            background:SetVertexColor(Style:GetColor("rowOdd"))
         else
-            background:SetVertexColor(0.06, 0.08, 0.12, 0.62)
+            background:SetVertexColor(Style:GetColor("rowEven"))
         end
 
         local label = row:CreateFontString(
@@ -1837,7 +1856,7 @@ function RTB:BuildSettingsUI()
         )
         label:SetPoint("LEFT", row, "LEFT", 8, 0)
         label:SetText(rowDefinition.label)
-        label:SetTextColor(0.85, 0.90, 0.96)
+        Style:ApplyText(label, "body")
 
         local toggle = CreateFrame(
             "Button",
@@ -1908,9 +1927,7 @@ function RTB:BuildSettingsUI()
 
     local gripTexture = grip:CreateTexture(nil, "ARTWORK")
     gripTexture:SetAllPoints(grip)
-    gripTexture:SetTexture(
-        "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"
-    )
+    gripTexture:SetTexture(Style.TEXTURES.resize)
 
     grip:SetScript("OnMouseDown", function(_, button)
         if button == "LeftButton" then
@@ -1922,14 +1939,10 @@ function RTB:BuildSettingsUI()
         RTB:LayoutSettings()
     end)
     grip:SetScript("OnEnter", function()
-        gripTexture:SetTexture(
-            "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight"
-        )
+        gripTexture:SetTexture(Style.TEXTURES.resizeHighlight)
     end)
     grip:SetScript("OnLeave", function()
-        gripTexture:SetTexture(
-            "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"
-        )
+        gripTexture:SetTexture(Style.TEXTURES.resize)
     end)
     self.SettingsResizeGrip = grip
 

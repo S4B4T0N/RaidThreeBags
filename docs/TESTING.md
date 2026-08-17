@@ -30,6 +30,44 @@ Static validation cannot verify protected-action behavior or item safety. Use a 
 
 Record client/server build, addon set, result and stack traces. Promote the version only after all applicable checks pass.
 
+## Automatic-arrangement checks - 0.4.3
+
+Use expendable test items and preserve a backup of `WTF/Account/<account>/SavedVariables/RaidThreeBags.lua` before the first test.
+
+1. Run `/reload`, confirm `RaidThreeBags 0.4.3` loads without Lua errors and verify the 30 px `A-Z` control is at the right edge of the upper bag-control row.
+2. Run the same arrangement once through `A-Z`, once through `/rtb sort` and once through `/rtb arrange`.
+3. Build an inventory containing poor-quality items, Trade Goods, new non-trade items and non-trade items whose retained first-observed timestamp is at least 24 hours old.
+4. Confirm each compatible movement pool uses `TRASH`, `CURRENT / KEEP`, `OLD / REVIEW`, one empty separator between consecutive nonempty sections and all surplus empty slots immediately before `OLD / REVIEW`.
+5. When `OLD / REVIEW` is absent, confirm surplus empty slots are at the end of that pool.
+6. Confirm internal order is hierarchical rather than globally alphabetic: category, subtype, equipment-slot rank, current-level usability, quality descending, item level descending, lowercase name and deterministic tie-breakers.
+7. Test normal bags and at least one specialty-bag family. Confirm no item crosses between incompatible movement pools.
+8. Create compatible same-item partial stacks whose consolidation is required to create separators. Confirm the entire consolidation and arrangement complete in one user-triggered session without item-count change.
+9. Remove separator capacity that consolidation cannot recover. Confirm the preflight refuses before moving any item.
+10. Confirm arrangement refuses during combat, with an item held on the cursor, with a locked item and while required item information is not cached.
+11. During a controlled test, change an equipped bag after planning but before the next move. Confirm the topology check stops the session before another physical move.
+12. Confirm short stale reads or temporary post-move locks are waited through, while unexpected or unconfirmed state stops safely.
+13. After success, run `/rtb sortlog last` and inspect `RaidThreeBagsDB.sortTrace` after logout or `/reload`. Confirm schema 2, `PASS`, complete before/after data, item totals, pool assignments, plans and confirmed operations.
+14. Trigger a capacity refusal and confirm an `ABORTED` trace. Test `/rtb sortlog off`, `status`, `on` and `clear`.
+15. Repeat the complete smoke test with Bagnon absent and with the supported Bagnon installation enabled.
+
+The final promotion gate is a target WoW 3.3.5a run of steps 1-15. PUC Lua syntax and mock results do not replace this runtime evidence.
+
+## GitHub alignment verification - 0.4.3
+
+- The exact source baseline passed `scripts/Validate-Project.ps1` on 2026-08-17.
+- All four deployable Lua modules and `tests/SettingsLogicMock.lua` passed official PUC Lua 5.1.5 syntax checking.
+- The expanded behavior mock passed under official PUC Lua 5.1.5 with `SETTINGS LOGIC OK`.
+- After normalizing only TOC/Lua version identifiers, all six deployable
+  `0.4.3` files match the distribution-selected `0.4.2` content exactly.
+- A persisted target-client `0.4.2` schema-2 trace recorded `PASS`: 36 of 36
+  arrange operations matched expected source/target IDs and counts, with
+  conserved totals, pool isolation, plan/hierarchy agreement, valid
+  separators, stable topology, complete snapshots and an empty cursor.
+- That live run covered general, herb and mining pools. It did not exercise
+  real OLD-content placement, stack consolidation or Bagnon coexistence.
+- `0.4.3` makes no behavior change, but a direct `0.4.3` client load remains
+  the strict version-specific runtime check before a tag or GitHub Release.
+
 ## Runtime verification - 2026-07-27
 
 - The user copied the complete `0.4.0-dev` installable directory into a WotLK
