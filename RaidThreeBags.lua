@@ -37,6 +37,7 @@ RTB.BANK_MIN_HEIGHT = 300
 RTB.BANK_MAX_WIDTH = 1000
 RTB.BANK_MAX_HEIGHT = 800
 RTB.ITEM_AGE_SECONDS = 24 * 60 * 60
+RTB.RECENT_TRANSFER_SECONDS = 15 * 60
 RTB.SORT_TRACE_SCHEMA = 2
 RTB.SORT_TRACE_MAX_SESSIONS = 10
 RTB.SORT_TRACE_MAX_ID = 2147483647
@@ -304,7 +305,7 @@ function RTB:GetCharacterItemAgeStore()
     return self.DB.itemAgeByCharacter[characterKey]
 end
 
-function RTB:UpdateItemAgeTracking(observedAt)
+function RTB:UpdateItemAgeTrackingForBags(observedAt, bagIDs, clearAbsent)
     if self.SortInProgress or (CursorHasItem and CursorHasItem()) then
         return false
     end
@@ -317,8 +318,12 @@ function RTB:UpdateItemAgeTracking(observedAt)
     observedAt = tonumber(observedAt) or (time and time()) or 0
     local counts = {}
     local inventoryComplete = true
+    bagIDs = bagIDs or self.BAG_IDS
+    if clearAbsent == nil then
+        clearAbsent = bagIDs == self.BAG_IDS
+    end
     local _, bagID
-    for _, bagID in ipairs(self.BAG_IDS) do
+    for _, bagID in ipairs(bagIDs) do
         local slotCount = GetContainerNumSlots(bagID) or 0
         local slotID
         for slotID = 1, slotCount do
@@ -352,26 +357,45 @@ function RTB:UpdateItemAgeTracking(observedAt)
         entry.lastSeen = observedAt
     end
 
-    for itemKey in pairs(ageStore) do
-        if not counts[itemKey] then
-            ageStore[itemKey] = nil
+    if clearAbsent then
+        for itemKey in pairs(ageStore) do
+            if not counts[itemKey] then
+                ageStore[itemKey] = nil
+            end
         end
     end
     return true
 end
 
-function RTB:GetInventorySortTopologyFingerprint()
+function RTB:UpdateItemAgeTracking(observedAt)
+    if self.AtBank then
+        return self:UpdateItemAgeTrackingForBags(
+            observedAt,
+            self:GetCombinedStorageBagIDs(),
+            true
+        )
+    end
+    return self:UpdateItemAgeTrackingForBags(
+        observedAt,
+        self.BAG_IDS,
+        false
+    )
+end
+
+function RTB:GetSortTopologyFingerprint(bagIDs)
     local parts = {}
     local _, bagID
-    for _, bagID in ipairs(self.BAG_IDS) do
+    for _, bagID in ipairs(bagIDs or self.BAG_IDS) do
         local slotCount = tonumber(GetContainerNumSlots(bagID)) or 0
         local _, bagType = GetContainerNumFreeSlots(bagID)
         local bagLink = ""
-        if bagID ~= BACKPACK_CONTAINER
-            and ContainerIDToInventoryID
-            and GetInventoryItemLink
-        then
-            local inventorySlot = ContainerIDToInventoryID(bagID)
+        if bagID > BACKPACK_CONTAINER and GetInventoryItemLink then
+            local inventorySlot
+            if bagID <= NUM_BAG_SLOTS and ContainerIDToInventoryID then
+                inventorySlot = ContainerIDToInventoryID(bagID)
+            elseif BankButtonIDToInvSlotID then
+                inventorySlot = BankButtonIDToInvSlotID(bagID, 1)
+            end
             if inventorySlot then
                 bagLink = GetInventoryItemLink("player", inventorySlot) or ""
             end
@@ -388,6 +412,31 @@ function RTB:GetInventorySortTopologyFingerprint()
         )
     end
     return table.concat(parts, "|")
+end
+
+function RTB:GetInventorySortTopologyFingerprint()
+    return self:GetSortTopologyFingerprint(self.BAG_IDS)
+end
+
+function RTB:GetBankSortBagIDs()
+    local bagIDs = { BANK_CONTAINER }
+    local _, bagID
+    for _, bagID in ipairs(self.BANK_BAG_IDS) do
+        table.insert(bagIDs, bagID)
+    end
+    return bagIDs
+end
+
+function RTB:GetCombinedStorageBagIDs()
+    local bagIDs = {}
+    local _, bagID
+    for _, bagID in ipairs(self.BAG_IDS) do
+        table.insert(bagIDs, bagID)
+    end
+    for _, bagID in ipairs(self:GetBankSortBagIDs()) do
+        table.insert(bagIDs, bagID)
+    end
+    return bagIDs
 end
 
 function RTB:GetItemFirstSeen(itemLink)
@@ -509,16 +558,23 @@ local function BuildPoolDesiredOrder(pool)
     return desired
 end
 
-function RTB:BuildInventorySortPlan(observedAt)
+function RTB:BuildContainerSortPlan(observedAt, bagIDs, trackAges)
     observedAt = tonumber(observedAt) or (time and time()) or 0
-    self:UpdateItemAgeTracking(observedAt)
+    bagIDs = bagIDs or self.BAG_IDS
+    if trackAges ~= false then
+        self:UpdateItemAgeTrackingForBags(
+            observedAt,
+            bagIDs,
+            bagIDs == self.BAG_IDS
+        )
+    end
 
     local pools = {}
     local poolByKey = {}
     local order = 0
     local tradeGoodsName = TRADE_GOODS or "Trade Goods"
     local _, bagID
-    for _, bagID in ipairs(self.BAG_IDS) do
+    for _, bagID in ipairs(bagIDs) do
         local _, bagType = GetContainerNumFreeSlots(bagID)
         bagType = tonumber(bagType) or 0
         local poolKey = bagType == 0
@@ -642,7 +698,7 @@ function RTB:BuildInventorySortPlan(observedAt)
         end
     end
     pools = activePools
-    pools.topologyFingerprint = self:GetInventorySortTopologyFingerprint()
+    pools.topologyFingerprint = self:GetSortTopologyFingerprint(bagIDs)
 
     for _, pool in ipairs(pools) do
         table.sort(pool.trash, SortItemsHierarchically)
@@ -676,6 +732,10 @@ function RTB:BuildInventorySortPlan(observedAt)
         end
     end
     return pools
+end
+
+function RTB:BuildInventorySortPlan(observedAt)
+    return self:BuildContainerSortPlan(observedAt, self.BAG_IDS, true)
 end
 
 local function TraceSlotKey(bagID, slotID)
@@ -821,9 +881,9 @@ function RTB:GetInventorySortTraceStore()
     return store
 end
 
-function RTB:CaptureInventorySortTraceSnapshot()
+function RTB:CaptureContainerSortTraceSnapshot(bagIDs)
     local snapshot = {
-        topology = self:GetInventorySortTopologyFingerprint(),
+        topology = self:GetSortTopologyFingerprint(bagIDs),
         cursorHasItem = CursorHasItem and CursorHasItem() and true or false,
         unknownCount = 0,
         slots = {},
@@ -831,7 +891,7 @@ function RTB:CaptureInventorySortTraceSnapshot()
         poolCounts = {}
     }
     local _, bagID
-    for _, bagID in ipairs(self.BAG_IDS) do
+    for _, bagID in ipairs(bagIDs or self.BAG_IDS) do
         local _, bagType = GetContainerNumFreeSlots(bagID)
         bagType = tonumber(bagType) or 0
         local poolKey = bagType == 0
@@ -874,6 +934,10 @@ function RTB:CaptureInventorySortTraceSnapshot()
         end
     end
     return snapshot
+end
+
+function RTB:CaptureInventorySortTraceSnapshot()
+    return self:CaptureContainerSortTraceSnapshot(self.BAG_IDS)
 end
 
 local function AppendTraceGroup(plan, groupName, items, observedAt)
@@ -966,7 +1030,7 @@ function RTB:CreateInventorySortTracePlan(pools, observedAt)
     return plan
 end
 
-function RTB:BeginInventorySortTrace()
+function RTB:BeginContainerSortTrace(scope, bagIDs)
     local store = self:GetInventorySortTraceStore()
     if not store or store.enabled == false then
         return nil
@@ -982,8 +1046,10 @@ function RTB:BeginInventorySortTrace()
             .. tostring(characterName or ""),
         startedAt = (time and time()) or 0,
         status = "RUNNING",
+        scope = scope or "Inventory",
+        bagIDs = bagIDs,
         events = {},
-        before = self:CaptureInventorySortTraceSnapshot()
+        before = self:CaptureContainerSortTraceSnapshot(bagIDs)
     }
     store.nextSessionID = store.nextSessionID + 1
     table.insert(store.sessions, trace)
@@ -991,6 +1057,10 @@ function RTB:BeginInventorySortTrace()
         table.remove(store.sessions, 1)
     end
     return trace
+end
+
+function RTB:BeginInventorySortTrace()
+    return self:BeginContainerSortTrace("Inventory", self.BAG_IDS)
 end
 
 function RTB:AttachInventorySortTracePlan(trace, pools, initial)
@@ -1390,7 +1460,9 @@ function RTB:CompleteInventorySortTrace(trace, session, message, isError)
     if session and session.pools then
         self:AttachInventorySortTracePlan(trace, session.pools, false)
     end
-    trace.after = self:CaptureInventorySortTraceSnapshot()
+    trace.after = self:CaptureContainerSortTraceSnapshot(
+        session and session.bagIDs or trace.bagIDs or self.BAG_IDS
+    )
     if session and session.pending and session.pending.traceEvent then
         session.pending.traceEvent.result = "UNCONFIRMED"
     end
@@ -1603,7 +1675,7 @@ function RTB:FindNextInventorySortMove(pools)
                     sourceIndex = sourceIndex + 1
                 end
                 if sourceIndex > #pool.slots then
-                    return nil, nil, "The inventory changed while sorting."
+                    return nil, nil, "Items changed while sorting."
                 end
 
                 local source = pool.slots[sourceIndex]
@@ -1665,6 +1737,7 @@ end
 
 function RTB:FinishInventorySort(message, isError)
     local session = self.SortSession
+    local scope = session and session.scope or "Inventory"
     local driver = self.InventorySortDriver
     if driver then
         driver:Hide()
@@ -1678,27 +1751,38 @@ function RTB:FinishInventorySort(message, isError)
         )
         if session.trace.status == "FAIL" then
             isError = true
-            message = "Inventory sort verification failed. "
+            message = scope .. " sort verification failed. "
                 .. "Use /rtb sortlog last."
         end
     end
     self.SortSession = nil
     self.SortInProgress = false
-    self:UpdateItemAgeTracking()
+    if scope == "Bank" then
+        self:UpdateItemAgeTrackingForBags(
+            nil,
+            self:GetBankSortBagIDs(),
+            false
+        )
+    else
+        self:UpdateItemAgeTracking()
+    end
     if self.MainFrame and self.MainFrame:IsShown() then
         self:RefreshAll()
     end
+    if self.PlayerBankFrame and self.PlayerBankFrame:IsShown() then
+        self:RefreshBankAll()
+    end
 
     if isError then
-        self:Print(message or "Inventory sorting stopped.")
+        self:Print(message or (scope .. " sorting stopped."))
         return false
     end
     if session and session.moves == 0 then
-        self:Print("Inventory is already arranged.")
+        self:Print(scope .. " is already arranged.")
     else
         self:Print(
             message
-                or ("Inventory arranged: "
+                or (scope .. " arranged: "
                     .. tostring(session and session.moves or 0)
                     .. " moves.")
         )
@@ -1714,6 +1798,13 @@ function RTB:ContinueInventorySort()
     if session.elapsed >= 60 then
         self:FinishInventorySort(
             "Sorting timed out before every slot was confirmed.",
+            true
+        )
+        return
+    end
+    if session.scope == "Bank" and not self.AtBank then
+        self:FinishInventorySort(
+            "Bank sorting stopped because the bank closed.",
             true
         )
         return
@@ -1781,7 +1872,11 @@ function RTB:ContinueInventorySort()
             session.moves = session.moves + 1
             if pending.kind == "consolidate" then
                 local rebuiltPools, rebuildError =
-                    self:BuildInventorySortPlan()
+                    self:BuildContainerSortPlan(
+                        nil,
+                        session.bagIDs,
+                        false
+                    )
                 if not rebuiltPools then
                     self:FinishInventorySort(rebuildError, true)
                     return
@@ -1814,7 +1909,7 @@ function RTB:ContinueInventorySort()
         return
     end
 
-    if self:GetInventorySortTopologyFingerprint()
+    if self:GetSortTopologyFingerprint(session.bagIDs)
         ~= session.topologyFingerprint
     then
         self:FinishInventorySort(
@@ -1974,6 +2069,8 @@ function RTB:SortInventory()
     self.SortSession = {
         pools = pools,
         trace = trace,
+        scope = "Inventory",
+        bagIDs = self.BAG_IDS,
         topologyFingerprint = pools.topologyFingerprint,
         moves = 0,
         elapsed = 0,
@@ -1984,6 +2081,405 @@ function RTB:SortInventory()
     }
     self.SortInProgress = true
     self:ScheduleInventorySort(0)
+    return true
+end
+
+function RTB:SortBank()
+    if self.SortInProgress then
+        self:Print("Sorting is already running.")
+        return false
+    end
+    if not self.AtBank then
+        self:Print("Bank sorting is available only at a banker.")
+        return false
+    end
+    local bagIDs = self:GetBankSortBagIDs()
+    local trace = self:BeginContainerSortTrace("Bank", bagIDs)
+    if InCombatLockdown and InCombatLockdown() then
+        self:CompleteInventorySortTrace(
+            trace,
+            nil,
+            "Sorting is unavailable during combat.",
+            true
+        )
+        self:Print("Sorting is unavailable during combat.")
+        return false
+    end
+    if CursorHasItem and CursorHasItem() then
+        self:CompleteInventorySortTrace(
+            trace,
+            nil,
+            "Clear the cursor before sorting.",
+            true
+        )
+        self:Print("Clear the cursor before sorting.")
+        return false
+    end
+
+    local pools, planError = self:BuildContainerSortPlan(nil, bagIDs, true)
+    if not pools then
+        self:CompleteInventorySortTrace(trace, nil, planError, true)
+        self:Print(planError)
+        return false
+    end
+    self:AttachInventorySortTracePlan(trace, pools, true)
+
+    self.SortSession = {
+        pools = pools,
+        trace = trace,
+        scope = "Bank",
+        bagIDs = bagIDs,
+        topologyFingerprint = pools.topologyFingerprint,
+        moves = 0,
+        elapsed = 0,
+        pending = nil,
+        phase = self:InventorySortNeedsConsolidation(pools)
+            and "consolidate"
+            or "arrange"
+    }
+    self.SortInProgress = true
+    self:ScheduleInventorySort(0)
+    return true
+end
+
+local function TransferPoolCompatible(sourceFamily, targetFamily)
+    sourceFamily = tonumber(sourceFamily) or 0
+    targetFamily = tonumber(targetFamily) or 0
+    if targetFamily == 0 then
+        return true
+    end
+    return sourceFamily ~= 0 and sourceFamily == targetFamily
+end
+
+function RTB:BuildRecentTransferSources(sourceBagIDs, observedAt)
+    observedAt = tonumber(observedAt) or (time and time()) or 0
+    self:UpdateItemAgeTrackingForBags(
+        observedAt,
+        self:GetCombinedStorageBagIDs(),
+        true
+    )
+
+    local sources = {}
+    local _, bagID
+    for _, bagID in ipairs(sourceBagIDs) do
+        local _, family = GetContainerNumFreeSlots(bagID)
+        family = tonumber(family) or 0
+        local slotCount = tonumber(GetContainerNumSlots(bagID)) or 0
+        local slotID
+        for slotID = 1, slotCount do
+            local texture, count, locked, _, _, _, itemLink =
+                GetContainerItemInfo(bagID, slotID)
+            if texture and not itemLink then
+                return nil, "Item information is still loading. Try again."
+            end
+            if itemLink then
+                if locked then
+                    return nil, "An item is locked. Try again shortly."
+                end
+                local firstSeen = self:GetItemFirstSeen(itemLink)
+                local age = firstSeen and observedAt - firstSeen or nil
+                if age and age >= 0 and age < self.RECENT_TRANSFER_SECONDS then
+                    local _, _, _, _, _, _, _, maxStack =
+                        GetItemInfo(itemLink)
+                    table.insert(sources, {
+                        bagID = bagID,
+                        slotID = slotID,
+                        itemKey = self:GetItemAgeKey(itemLink),
+                        count = math.max(1, tonumber(count) or 1),
+                        maxStack = math.max(1, tonumber(maxStack) or 1),
+                        family = family,
+                        firstSeen = firstSeen
+                    })
+                end
+            end
+        end
+    end
+    return sources
+end
+
+function RTB:FindRecentTransferTarget(source, targetBagIDs)
+    local emptyTarget
+    local _, bagID
+    for _, bagID in ipairs(targetBagIDs) do
+        local _, family = GetContainerNumFreeSlots(bagID)
+        family = tonumber(family) or 0
+        if TransferPoolCompatible(source.family, family) then
+            local slotCount = tonumber(GetContainerNumSlots(bagID)) or 0
+            local slotID
+            for slotID = 1, slotCount do
+                local target = { bagID = bagID, slotID = slotID }
+                local itemKey, count, locked, state =
+                    self:GetContainerSlotState(target)
+                if state == "unknown" then
+                    return nil, "Item information is still loading. Try again."
+                end
+                if not locked and itemKey == source.itemKey
+                    and count + source.count <= source.maxStack
+                then
+                    target.itemKey = itemKey
+                    target.count = count
+                    return target
+                end
+                if not locked and state == "empty" and not emptyTarget then
+                    target.itemKey = false
+                    target.count = 0
+                    emptyTarget = target
+                end
+            end
+        end
+    end
+    return emptyTarget
+end
+
+function RTB:EnsureRecentTransferDriver()
+    if self.RecentTransferDriver then
+        return self.RecentTransferDriver
+    end
+    local driver = CreateFrame("Frame")
+    driver:Hide()
+    driver:SetScript("OnUpdate", function(self, elapsed)
+        local session = RTB.TransferSession
+        if not session then
+            self:Hide()
+            return
+        end
+        elapsed = tonumber(elapsed) or 0
+        session.elapsed = session.elapsed + elapsed
+        if session.pending then
+            session.pending.elapsed = session.pending.elapsed + elapsed
+        end
+        self.rtbDelay = (self.rtbDelay or 0) - elapsed
+        if self.rtbDelay > 0 then
+            return
+        end
+        self:Hide()
+        RTB:ContinueRecentTransfer()
+    end)
+    self.RecentTransferDriver = driver
+    return driver
+end
+
+function RTB:ScheduleRecentTransfer(delay)
+    if not self.TransferSession then
+        return
+    end
+    local driver = self:EnsureRecentTransferDriver()
+    delay = math.max(0, tonumber(delay) or 0)
+    if driver:IsShown() then
+        driver.rtbDelay = math.min(driver.rtbDelay or delay, delay)
+    else
+        driver.rtbDelay = delay
+        driver:Show()
+    end
+end
+
+function RTB:FinishRecentTransfer(message, isError)
+    local session = self.TransferSession
+    if self.RecentTransferDriver then
+        self.RecentTransferDriver:Hide()
+    end
+    self.TransferSession = nil
+    self.SortInProgress = false
+    if self.AtBank then
+        self:UpdateItemAgeTrackingForBags(
+            nil,
+            self:GetCombinedStorageBagIDs(),
+            true
+        )
+    end
+    if self.MainFrame and self.MainFrame:IsShown() then
+        self:RefreshAll()
+    end
+    if self.PlayerBankFrame and self.PlayerBankFrame:IsShown() then
+        self:RefreshBankAll()
+    end
+    if isError then
+        self:Print(message or "Recent-item transfer stopped.")
+        return false
+    end
+    self:Print(
+        message
+            or ("Recent items transferred: "
+                .. tostring(session and session.movedStacks or 0)
+                .. " stacks, "
+                .. tostring(session and session.movedItems or 0)
+                .. " items; "
+                .. tostring(session and session.skippedStacks or 0)
+                .. " stacks skipped.")
+    )
+    return true
+end
+
+function RTB:ContinueRecentTransfer()
+    local session = self.TransferSession
+    if not session then
+        return
+    end
+    if session.elapsed >= 60 then
+        self:FinishRecentTransfer("Recent-item transfer timed out.", true)
+        return
+    end
+    if not self.AtBank then
+        self:FinishRecentTransfer("Transfer stopped because the bank closed.", true)
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        self:FinishRecentTransfer("Transfer stopped when combat began.", true)
+        return
+    end
+    if CursorHasItem and CursorHasItem() then
+        self:FinishRecentTransfer(
+            "Transfer stopped because an item remained on the cursor.",
+            true
+        )
+        return
+    end
+    if self:GetSortTopologyFingerprint(self:GetCombinedStorageBagIDs())
+        ~= session.topologyFingerprint
+    then
+        self:FinishRecentTransfer(
+            "Bag layout changed during transfer. Try again.",
+            true
+        )
+        return
+    end
+
+    local pending = session.pending
+    if pending then
+        local sourceKey, sourceCount, sourceLocked, sourceState =
+            self:GetContainerSlotState(pending.source)
+        local targetKey, targetCount, targetLocked, targetState =
+            self:GetContainerSlotState(pending.target)
+        local confirmed = sourceState == "empty"
+            and not sourceLocked
+            and targetState == "occupied"
+            and not targetLocked
+            and targetKey == pending.itemKey
+            and targetCount == pending.expectedTargetCount
+        if confirmed then
+            session.movedStacks = session.movedStacks + 1
+            session.movedItems = session.movedItems + pending.sourceCount
+            session.index = session.index + 1
+            session.pending = nil
+            self:ScheduleRecentTransfer(0.05)
+            return
+        end
+        if pending.elapsed >= 5 then
+            self:FinishRecentTransfer(
+                "The client did not confirm a recent-item transfer.",
+                true
+            )
+            return
+        end
+        self:ScheduleRecentTransfer(0.10)
+        return
+    end
+
+    local source = session.sources[session.index]
+    if not source then
+        self:FinishRecentTransfer()
+        return
+    end
+    local sourceKey, sourceCount, sourceLocked, sourceState =
+        self:GetContainerSlotState(source)
+    if sourceState ~= "occupied" or sourceKey ~= source.itemKey then
+        session.skippedStacks = session.skippedStacks + 1
+        session.index = session.index + 1
+        self:ScheduleRecentTransfer(0)
+        return
+    end
+    if sourceLocked then
+        self:ScheduleRecentTransfer(0.10)
+        return
+    end
+    source.count = sourceCount
+    local target, targetError =
+        self:FindRecentTransferTarget(source, session.targetBagIDs)
+    if targetError then
+        self:FinishRecentTransfer(targetError, true)
+        return
+    end
+    if not target then
+        session.skippedStacks = session.skippedStacks + 1
+        session.index = session.index + 1
+        self:ScheduleRecentTransfer(0)
+        return
+    end
+
+    local expectedTargetCount = target.count + sourceCount
+    PickupContainerItem(source.bagID, source.slotID)
+    if not CursorHasItem or not CursorHasItem() then
+        self:FinishRecentTransfer("Could not pick up a recent item.", true)
+        return
+    end
+    PickupContainerItem(target.bagID, target.slotID)
+    if CursorHasItem and CursorHasItem() then
+        PickupContainerItem(source.bagID, source.slotID)
+    end
+    if CursorHasItem and CursorHasItem() then
+        self:FinishRecentTransfer("Transfer left an item on the cursor.", true)
+        return
+    end
+    session.pending = {
+        source = source,
+        target = target,
+        itemKey = source.itemKey,
+        sourceCount = sourceCount,
+        expectedTargetCount = expectedTargetCount,
+        elapsed = 0
+    }
+    self:ScheduleRecentTransfer(0.10)
+end
+
+function RTB:TransferRecentItems(direction)
+    if self.SortInProgress then
+        self:Print("Sorting or transfer is already running.")
+        return false
+    end
+    if not self.AtBank then
+        self:Print("Recent-item transfer is available only at a banker.")
+        return false
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        self:Print("Transfer is unavailable during combat.")
+        return false
+    end
+    if CursorHasItem and CursorHasItem() then
+        self:Print("Clear the cursor before transferring items.")
+        return false
+    end
+
+    local sourceBagIDs
+    local targetBagIDs
+    if direction == "bank-to-bags" then
+        sourceBagIDs = self:GetBankSortBagIDs()
+        targetBagIDs = self.BAG_IDS
+    elseif direction == "bags-to-bank" then
+        sourceBagIDs = self.BAG_IDS
+        targetBagIDs = self:GetBankSortBagIDs()
+    else
+        return false
+    end
+    local sources, sourceError = self:BuildRecentTransferSources(sourceBagIDs)
+    if not sources then
+        self:Print(sourceError)
+        return false
+    end
+    self.TransferSession = {
+        direction = direction,
+        sources = sources,
+        targetBagIDs = targetBagIDs,
+        topologyFingerprint =
+            self:GetSortTopologyFingerprint(self:GetCombinedStorageBagIDs()),
+        index = 1,
+        movedStacks = 0,
+        movedItems = 0,
+        skippedStacks = 0,
+        elapsed = 0,
+        pending = nil
+    }
+    self.SortInProgress = true
+    self:ScheduleRecentTransfer(0)
     return true
 end
 
@@ -2101,6 +2597,9 @@ function RTB:BAG_UPDATE()
     if self.SortSession then
         self:ScheduleInventorySort(0.05)
     end
+    if self.TransferSession then
+        self:ScheduleRecentTransfer(0.05)
+    end
     self:UpdateItemAgeTracking()
     if self.MainFrame and self.MainFrame:IsShown() then
         self:RefreshAll()
@@ -2122,6 +2621,9 @@ end
 function RTB:ITEM_LOCK_CHANGED(bagID, slotID)
     if self.SortSession then
         self:ScheduleInventorySort(0.05)
+    end
+    if self.TransferSession then
+        self:ScheduleRecentTransfer(0.05)
     end
     if self.MainFrame and self.MainFrame:IsShown() then
         self:UpdateInventoryBagSlots()
@@ -2155,6 +2657,12 @@ SlashCmdList.RAIDTHREEBAGS = function(message)
     local command = tostring(message or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
     if command == "sort" or command == "arrange" then
         RTB:SortInventory()
+    elseif command == "sort bank" or command == "arrange bank" then
+        RTB:SortBank()
+    elseif command == "transfer bank" then
+        RTB:TransferRecentItems("bags-to-bank")
+    elseif command == "transfer bags" then
+        RTB:TransferRecentItems("bank-to-bags")
     elseif command == "sortlog on" then
         RTB:SetInventorySortTraceEnabled(true)
     elseif command == "sortlog off" then
@@ -2193,6 +2701,9 @@ SlashCmdList.RAIDTHREEBAGS = function(message)
         RTB:Print("/rtb reset inventory = reset the inventory window")
         RTB:Print("/rtb reset bank = reset the bank window")
         RTB:Print("/rtb sort = arrange inventory")
+        RTB:Print("/rtb sort bank = arrange the live player bank")
+        RTB:Print("/rtb transfer bank = move <15 minute items to bank")
+        RTB:Print("/rtb transfer bags = move <15 minute items to bags")
         RTB:Print("/rtb sortlog on|off = enable or disable persistent sort logs")
         RTB:Print("/rtb sortlog last = print the last sort verdict")
         RTB:Print("/rtb sortlog status|clear = inspect or clear sort logs")

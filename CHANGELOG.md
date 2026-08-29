@@ -1,14 +1,15 @@
 # Changelog
 
-## 0.4.3 - 2026-08-17 (GitHub alignment candidate; unreleased)
+## 0.4.3 - 2026-08-29
 
-- Changed only the reported addon version from `0.4.2` to `0.4.3`.
-- Aligned the local GitHub candidate branch with the exact six-file addon
-  content selected for the user-reported Warperia `0.4.2` distribution.
-- Kept inventory, bank, hierarchical arrangement, Sort Trace and UI behavior
-  byte-identical to `0.4.2`.
-- Prepared branch `codex/raid-three-bags-0.4.3` for a later explicit GitHub
-  push. No push, tag or GitHub Release is part of this preparation.
+- Added live personal-bank arrangement with the same safe three-section hierarchy as inventory sorting.
+- Added matching bank-side `A-Z` sorting control.
+- Added `/rtb sort bank` and `/rtb arrange bank` commands.
+- Added bidirectional recent-item transfer controls between character bags and the live personal bank.
+- Added `/rtb transfer bank` and `/rtb transfer bags` commands.
+- Extended schema-2 Sort Trace snapshots, confirmed operations and final invariant auditing to bank sorting and transfer sessions.
+- Preserved compatible bag-pool isolation, one-operation-at-a-time native pickup handling, stack consolidation, topology guards and safe stops for combat, cursor, lock, cache and confirmation failures.
+- Updated the addon version and release documentation to `0.4.3`.
 
 ## 0.4.2 - 2026-08-17
 
@@ -32,26 +33,17 @@
 - Added before/after snapshots, pool counts, classification and age metadata, hierarchical keys, initial and final plans, confirmed moves or merges and aggregated wait evidence.
 - Added independent `PASS`, `FAIL` and `ABORTED` verification covering item-count conservation, pool isolation, exact plan agreement, hierarchy, separators, `OLD / REVIEW` placement, stable topology, readable snapshots and an empty cursor.
 - Added `/rtb sortlog on|off`, `/rtb sortlog status`, `/rtb sortlog last` and `/rtb sortlog clear`.
-- Documented that `sortlog off` disables both new trace retention and the independent final audit for future sessions; existing sessions remain until explicitly cleared.
 
 ### UI and validation
 
 - Added `RaidThreeUIStyle.lua` v1.0.1 as the shared style module for inventory, bank and settings controls.
 - Expanded the behavior mock to cover arrangement, partial-stack consolidation, delayed client reads, topology changes, safety refusals, Sort Trace persistence and adversarial trace verification.
-- Passed source validation, official PUC Lua 5.1.5 syntax checking and the behavior mock with `SETTINGS LOGIC OK`.
-- A persisted target-client schema-2 trace recorded `PASS` with 36 of 36
-  arrange operations confirmed exactly. The user reports that this build was
-  distributed through Warperia. Public listing visibility and Bagnon
-  coexistence were not independently verified in this workspace.
 
 ## 0.4.1 - 2026-07-27
 
-- Moved the installable `.toc`, Lua files and MIT license to repository root
-  for Warperia's default-branch GitHub installer.
-- Added an isolated simulation that verifies the resulting manifest path is
-  `Interface/AddOns/RaidThreeBags/RaidThreeBags.toc`.
-- Kept addon behavior unchanged; only repository layout and version
-  identifiers changed.
+- Moved the installable `.toc`, Lua files and MIT license to repository root for Warperia's default-branch GitHub installer.
+- Added an isolated simulation that verifies the resulting manifest path is `Interface/AddOns/RaidThreeBags/RaidThreeBags.toc`.
+- Kept addon behavior unchanged; only repository layout and version identifiers changed.
 
 ## 0.4.0 - 2026-07-27
 
@@ -60,11 +52,4 @@
 - Standardized maintainer metadata.
 - Added `/rtb version` and English command help.
 - Added release validation and an inventory/bank runtime test matrix.
-- Included the MIT license in the installable addon directory, declared
-  `X-License: MIT` in the manifest and validated both license copies.
-- Updated the GitHub validation workflow to `actions/checkout@v7` after GitHub
-  deprecated the Node.js 20 runtime used by the earlier workflow dependency.
-
-Promoted to the stable local release source after the exact `0.4.0-dev`
-candidate files matched the installed test copy by SHA-256 and the user
-reported all expected in-client behavior working.
+- Included the MIT license in the installable addon directory, declared `X-License: MIT` in the manifest and validated both license copies.

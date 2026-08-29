@@ -531,6 +531,114 @@ function RTB:LayoutBankBagSlots()
     end
 end
 
+function RTB:CreateBankSortButton()
+    local button = CreateFrame(
+        "Button",
+        "RaidThreeBagsBankSortButton",
+        self.BankBagBar
+    )
+    Style:ApplySquareControl(button)
+    button:RegisterForClicks("LeftButtonUp")
+    button:SetPoint("RIGHT", self.BankBagBar, "RIGHT", 0, 0)
+
+    local label = button:CreateFontString(
+        nil,
+        "OVERLAY",
+        "GameFontNormalSmall"
+    )
+    label:SetPoint("CENTER", button, "CENTER", 0, 0)
+    label:SetText("A-Z")
+    Style:ApplyText(label, "buttonLabel")
+
+    local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+    highlight:SetAllPoints(button)
+    highlight:SetTexture(Style.TEXTURES.highlight)
+    highlight:SetBlendMode("ADD")
+
+    button.rtbLabel = label
+    button:SetScript("OnEnter", function(self)
+        if self:GetRight() and self:GetRight() > (GetScreenWidth() / 2) then
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        else
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        end
+        GameTooltip:SetText("Arrange bank")
+        GameTooltip:AddLine(
+            "Uses the same safe three-group ordering as inventory A-Z. "
+                .. "The main bank container and each bank-bag family remain "
+                .. "compatible movement pools.",
+            1,
+            1,
+            1,
+            true
+        )
+        GameTooltip:AddLine(
+            "Compatible partial stacks may consolidate first. Bank access "
+                .. "must remain open until every move is confirmed.",
+            0.65,
+            0.75,
+            0.85,
+            true
+        )
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        if GameTooltip:IsOwned(self) then
+            GameTooltip:Hide()
+        end
+    end)
+    button:SetScript("OnClick", function()
+        RTB:SortBank()
+    end)
+
+    self.BankSortButton = button
+    return button
+end
+
+function RTB:CreateBankTransferButton()
+    local button = CreateFrame(
+        "Button",
+        "RaidThreeBagsBankTransferButton",
+        self.BankBagBar
+    )
+    Style:CreateBidirectionalArrowChrome(button)
+    button:RegisterForClicks("LeftButtonUp")
+    button:SetPoint(
+        "RIGHT",
+        self.BankSortButton,
+        "LEFT",
+        -4,
+        0
+    )
+    button:SetScript("OnEnter", function(self)
+        if self:GetRight() and self:GetRight() > (GetScreenWidth() / 2) then
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        else
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        end
+        GameTooltip:SetText("Move recent items to bags")
+        GameTooltip:AddLine(
+            "Moves only items whose item history is shorter than 15 minutes. "
+                .. "Item history remains unchanged after transfer.",
+            1,
+            1,
+            1,
+            true
+        )
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        if GameTooltip:IsOwned(self) then
+            GameTooltip:Hide()
+        end
+    end)
+    button:SetScript("OnClick", function()
+        RTB:TransferRecentItems("bank-to-bags")
+    end)
+    self.BankTransferButton = button
+    return button
+end
+
 function RTB:LayoutBankItems()
     self.BankLayoutPending = false
     if not self.PlayerBankFrame
@@ -663,6 +771,8 @@ function RTB:BuildBankUI()
         self:CreateBankBagSlot(bagID)
     end
     self:LayoutBankBagSlots()
+    self:CreateBankSortButton()
+    self:CreateBankTransferButton()
 
     local itemPanel = CreateFrame("Frame", nil, window)
     itemPanel:SetPoint("TOPLEFT", window, "TOPLEFT", 20, -94)
@@ -955,6 +1065,12 @@ end
 
 function RTB:BANKFRAME_CLOSED()
     self.AtBank = false
+    if self.TransferSession then
+        self:FinishRecentTransfer(
+            "Transfer stopped because the bank closed.",
+            true
+        )
+    end
     self:HideBank()
     if BankFrame and BankFrame:IsShown() and BankFrame_OnEvent then
         BankFrame_OnEvent(BankFrame, "BANKFRAME_CLOSED")
@@ -966,12 +1082,24 @@ function RTB:BANKFRAME_CLOSED()
 end
 
 function RTB:PLAYERBANKSLOTS_CHANGED()
+    if self.SortSession and self.SortSession.scope == "Bank" then
+        self:ScheduleInventorySort(0.05)
+    end
+    if self.TransferSession then
+        self:ScheduleRecentTransfer(0.05)
+    end
     if self.PlayerBankFrame and self.PlayerBankFrame:IsShown() then
         self:RefreshBankAll()
     end
 end
 
 function RTB:PLAYERBANKBAGSLOTS_CHANGED()
+    if self.SortSession and self.SortSession.scope == "Bank" then
+        self:ScheduleInventorySort(0.05)
+    end
+    if self.TransferSession then
+        self:ScheduleRecentTransfer(0.05)
+    end
     if self.PlayerBankFrame and self.PlayerBankFrame:IsShown() then
         self:RefreshBankAll()
     end

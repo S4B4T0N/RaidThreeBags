@@ -1054,6 +1054,50 @@ function RTB:CreateInventorySortButton()
     return button
 end
 
+function RTB:CreateInventoryTransferButton()
+    local button = CreateFrame(
+        "Button",
+        "RaidThreeBagsInventoryTransferButton",
+        self.InventoryBagBar
+    )
+    Style:CreateBidirectionalArrowChrome(button)
+    button:RegisterForClicks("LeftButtonUp")
+    button:SetPoint(
+        "RIGHT",
+        self.InventorySortButton,
+        "LEFT",
+        -4,
+        0
+    )
+    button:SetScript("OnEnter", function(self)
+        if self:GetRight() and self:GetRight() > (GetScreenWidth() / 2) then
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        else
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        end
+        GameTooltip:SetText("Move recent items to bank")
+        GameTooltip:AddLine(
+            "Moves only items whose item history is shorter than 15 minutes. "
+                .. "Item history remains unchanged after transfer.",
+            1,
+            1,
+            1,
+            true
+        )
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        if GameTooltip:IsOwned(self) then
+            GameTooltip:Hide()
+        end
+    end)
+    button:SetScript("OnClick", function()
+        RTB:TransferRecentItems("bags-to-bank")
+    end)
+    self.InventoryTransferButton = button
+    return button
+end
+
 function RTB:GetBagParent(bagID)
     local parent = self.BagParents[bagID]
     if parent then
@@ -1358,6 +1402,7 @@ function RTB:BuildUI()
     end
     self:LayoutInventoryBagSlots()
     self:CreateInventorySortButton()
+    self:CreateInventoryTransferButton()
 
     local itemPanel = CreateFrame("Frame", nil, window)
     itemPanel:SetPoint("TOPLEFT", window, "TOPLEFT", 20, -94)

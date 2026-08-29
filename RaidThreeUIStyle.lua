@@ -3,7 +3,7 @@
 -- Shared Raid Three visual tokens for WoW 3.3.5a / Lua 5.1.
 -- ============================================================
 
-local MODULE_VERSION = "1.0.1"
+local MODULE_VERSION = "1.0.2"
 
 local function ParseVersion(version)
     local major, minor, patch =
@@ -227,6 +227,50 @@ function Style:CreateSquareIconChrome(button, texturePath)
     highlight:SetBlendMode("ADD")
     button.r3StyleBorder = border
     button.r3StyleHighlight = highlight
+    return true
+end
+
+function Style:CreateBidirectionalArrowChrome(button)
+    if not button then
+        return false
+    end
+
+    self:CreateSquareIconChrome(
+        button,
+        "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"
+    )
+    local arrowOffset = 6.05
+    local right = button:GetNormalTexture()
+    right:SetWidth(12)
+    right:SetHeight(self.METRICS.squareIcon)
+    right:ClearAllPoints()
+    right:SetPoint("CENTER", button, "CENTER", arrowOffset, 0)
+
+    local rightPushed = button:GetPushedTexture()
+    rightPushed:SetWidth(12)
+    rightPushed:SetHeight(self.METRICS.squareIcon)
+    rightPushed:ClearAllPoints()
+    rightPushed:SetPoint("CENTER", button, "CENTER", arrowOffset + 1, -1)
+
+    local left = button:CreateTexture(nil, "ARTWORK")
+    left:SetWidth(12)
+    left:SetHeight(self.METRICS.squareIcon)
+    left:SetPoint("CENTER", button, "CENTER", -arrowOffset, 0)
+    left:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
+    left:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    left:SetVertexColor(self:GetColor("iconNormal"))
+
+    button:SetScript("OnMouseDown", function()
+        left:ClearAllPoints()
+        left:SetPoint("CENTER", button, "CENTER", -arrowOffset + 1, -1)
+        left:SetVertexColor(Style:GetColor("iconPushed"))
+    end)
+    button:SetScript("OnMouseUp", function()
+        left:ClearAllPoints()
+        left:SetPoint("CENTER", button, "CENTER", -arrowOffset, 0)
+        left:SetVertexColor(Style:GetColor("iconNormal"))
+    end)
+    button.rtbBidirectionalLeft = left
     return true
 end
 

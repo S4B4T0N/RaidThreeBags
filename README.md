@@ -4,9 +4,9 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 
 ## Project status
 
-`0.4.3` is the current GitHub alignment candidate. It changes only version identifiers from the exact `0.4.2` addon content selected for distribution; addon behavior is unchanged. Static validation, official PUC Lua 5.1.5 parsing, the retained behavior mock and Warperia GitHub-layout simulation pass.
+`0.4.3` is the current release candidate. It adds live player-bank sorting, bank transfer controls and the matching schema-2 Sort Trace coverage described below. Static validation, official PUC Lua 5.1.5 parsing, the retained behavior mock and Warperia GitHub-layout simulation pass. A fresh direct client smoke test remains the final release gate.
 
-`0.4.2` is the stable source line. The user reports distributing its prepared six-file package through Warperia. A persisted target-client schema-2 trace recorded `PASS` with all 36 physical arrangement operations confirmed exactly. Public listing visibility and Bagnon coexistence were not independently verified here. GitHub `main` still contains `0.4.1`; branch `codex/raid-three-bags-0.4.3` is prepared for a later explicit push.
+`0.4.2` is the previous stable source line. The public repository is being updated from the prepared `release` branch so Warperia can consume the new default-branch content.
 
 The public repository is [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags).
 
