@@ -1033,7 +1033,8 @@ function RTB:CreateInventorySortButton()
         )
         GameTooltip:AddLine(
             "Compatible partial stacks may consolidate inside their bag "
-                .. "family first.",
+                .. "family first. Occupied bottom slots stay in place; "
+                .. "their items may receive matching merges.",
             0.65,
             0.75,
             0.85,

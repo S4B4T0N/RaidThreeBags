@@ -573,8 +573,10 @@ function RTB:CreateBankSortButton()
             true
         )
         GameTooltip:AddLine(
-            "Compatible partial stacks may consolidate first. Bank access "
-                .. "must remain open until every move is confirmed.",
+            "Compatible partial stacks may consolidate first. Occupied "
+                .. "bottom slots stay in place; their items may receive "
+                .. "matching merges. Bank access must remain open until "
+                .. "every move is confirmed.",
             0.65,
             0.75,
             0.85,

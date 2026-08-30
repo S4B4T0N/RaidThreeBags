@@ -9,7 +9,7 @@ RaidThreeBags = RaidThreeBags or {}
 local RTB = RaidThreeBags
 
 RTB.ADDON_NAME = "RaidThreeBags"
-RTB.VERSION = "0.4.3"
+RTB.VERSION = "0.4.4"
 RTB.BAG_IDS = { 0, 1, 2, 3, 4 }
 RTB.BANK_BAG_IDS = { 5, 6, 7, 8, 9, 10, 11 }
 RTB.SPECIAL_BAG_TYPES = {
@@ -523,8 +523,48 @@ local function CountNonEmptySortGroups(pool)
     return count
 end
 
+local function ApplyFrozenTail(pool)
+    pool.frozenCount = 0
+    pool.frozenSlots = {}
+    local index = #pool.slots
+    while index >= 1 do
+        local slot = pool.slots[index]
+        if not slot.itemKey then
+            break
+        end
+        slot.frozen = true
+        if slot.item then
+            slot.item.frozen = true
+        end
+        pool.frozenSlots[index] = true
+        pool.frozenCount = pool.frozenCount + 1
+        index = index - 1
+    end
+
+    if pool.frozenCount == 0 then
+        return
+    end
+
+    local movableTrash = {}
+    local movableCurrent = {}
+    local movableOld = {}
+    local _, item
+    for _, item in ipairs(pool.trash) do
+        if not item.frozen then table.insert(movableTrash, item) end
+    end
+    for _, item in ipairs(pool.current) do
+        if not item.frozen then table.insert(movableCurrent, item) end
+    end
+    for _, item in ipairs(pool.old) do
+        if not item.frozen then table.insert(movableOld, item) end
+    end
+    pool.trash = movableTrash
+    pool.current = movableCurrent
+    pool.old = movableOld
+end
+
 local function BuildPoolDesiredOrder(pool)
-    local desired = {}
+    local movableDesired = {}
     local groups = {
         { key = "trash", items = pool.trash },
         { key = "current", items = pool.current },
@@ -536,15 +576,15 @@ local function BuildPoolDesiredOrder(pool)
     for _, group in ipairs(groups) do
         if #group.items > 0 then
             if appendedGroups > 0 then
-                table.insert(desired, false)
+                table.insert(movableDesired, false)
             end
             if group.key == "old" then
                 local emptyIndex
                 for emptyIndex = 1, remainingEmpty do
-                    table.insert(desired, false)
+                    table.insert(movableDesired, false)
                 end
             end
-            AppendSortItems(desired, group.items)
+            AppendSortItems(movableDesired, group.items)
             appendedGroups = appendedGroups + 1
         end
     end
@@ -552,7 +592,19 @@ local function BuildPoolDesiredOrder(pool)
     if #pool.old == 0 then
         local emptyIndex
         for emptyIndex = 1, remainingEmpty do
-            table.insert(desired, false)
+            table.insert(movableDesired, false)
+        end
+    end
+
+    local desired = {}
+    local movableIndex = 1
+    local slotIndex
+    for slotIndex, slot in ipairs(pool.slots) do
+        if slot.frozen then
+            desired[slotIndex] = slot.itemKey
+        else
+            desired[slotIndex] = movableDesired[movableIndex] or false
+            movableIndex = movableIndex + 1
         end
     end
     return desired
@@ -653,6 +705,7 @@ function RTB:BuildContainerSortPlan(observedAt, bagIDs, trackAges)
                 }
                 slot.itemKey = itemKey
                 slot.count = item.count
+                slot.item = item
                 slot.maxStack = maxStack
 
                 local stack = pool.stackByKey[itemKey]
@@ -701,6 +754,7 @@ function RTB:BuildContainerSortPlan(observedAt, bagIDs, trackAges)
     pools.topologyFingerprint = self:GetSortTopologyFingerprint(bagIDs)
 
     for _, pool in ipairs(pools) do
+        ApplyFrozenTail(pool)
         table.sort(pool.trash, SortItemsHierarchically)
         table.sort(pool.current, SortItemsHierarchically)
         table.sort(pool.old, SortItemsHierarchically)
@@ -1000,7 +1054,8 @@ function RTB:CreateInventorySortTracePlan(pools, observedAt)
         for _, slot in ipairs(pool.slots) do
             table.insert(tracePool.slots, {
                 bagID = slot.bagID,
-                slotID = slot.slotID
+                slotID = slot.slotID,
+                frozen = slot.frozen and true or false
             })
         end
         local index
@@ -1025,6 +1080,36 @@ function RTB:CreateInventorySortTracePlan(pools, observedAt)
             pool.old,
             observedAt
         )
+        local frozenSlot
+        for _, frozenSlot in ipairs(pool.slots) do
+            if frozenSlot.frozen and frozenSlot.item and not plan.items[frozenSlot.item.itemKey] then
+                local frozenItem = frozenSlot.item
+                plan.items[frozenItem.itemKey] = {
+                    itemKey = frozenItem.itemKey,
+                    name = frozenItem.name,
+                    sortName = frozenItem.sortName,
+                    group = frozenItem.group,
+                    quality = frozenItem.quality,
+                    itemType = frozenItem.itemType,
+                    itemSubType = frozenItem.itemSubType,
+                    itemLevel = frozenItem.itemLevel,
+                    minimumLevel = frozenItem.minimumLevel,
+                    equipLocation = frozenItem.equipLocation,
+                    category = frozenItem.category,
+                    categoryRank = frozenItem.categoryRank,
+                    subTypeRank = frozenItem.subTypeRank,
+                    equipRank = frozenItem.equipRank,
+                    usableRank = frozenItem.usableRank,
+                    firstSeen = frozenItem.firstSeen
+                }
+                if frozenItem.firstSeen then
+                    plan.items[frozenItem.itemKey].ageSeconds = math.max(
+                        0,
+                        observedAt - frozenItem.firstSeen
+                    )
+                end
+            end
+        end
         table.insert(plan.pools, tracePool)
     end
     return plan
@@ -1578,6 +1663,7 @@ function RTB:FindInventoryConsolidationMove(pools)
                     while sourceIndex >= 1 do
                         local source = pool.slots[sourceIndex]
                         if sourceIndex ~= targetIndex
+                            and not source.frozen
                             and source.itemKey == target.itemKey
                         then
                             return source, target, target.maxStack
@@ -1668,9 +1754,18 @@ function RTB:FindNextInventorySortMove(pools)
             local target = pool.slots[targetIndex]
             local desiredKey = pool.desired[targetIndex]
             if target.itemKey ~= desiredKey then
+                if target.frozen then
+                    return nil, nil, "Frozen bottom slots changed while sorting."
+                end
                 local sourceIndex = targetIndex + 1
                 while sourceIndex <= #pool.slots
-                    and pool.slots[sourceIndex].itemKey ~= desiredKey
+                    and pool.slots[sourceIndex].frozen
+                do
+                    sourceIndex = sourceIndex + 1
+                end
+                while sourceIndex <= #pool.slots
+                    and (pool.slots[sourceIndex].frozen
+                        or pool.slots[sourceIndex].itemKey ~= desiredKey)
                 do
                     sourceIndex = sourceIndex + 1
                 end

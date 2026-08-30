@@ -4,9 +4,7 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 
 ## Project status
 
-`0.4.3` is the current release candidate. It adds live player-bank sorting, bank transfer controls and the matching schema-2 Sort Trace coverage described below. Static validation, official PUC Lua 5.1.5 parsing, the retained behavior mock and Warperia GitHub-layout simulation pass. A fresh direct client smoke test remains the final release gate.
-
-`0.4.2` is the previous stable source line. The public repository is being updated from the prepared `release` branch so Warperia can consume the new default-branch content.
+`0.4.4` is the current development version. It adds frozen occupied bottom-tail slots to inventory and live bank arrangement: swaps cannot move them, but compatible partial stacks may merge into them. The `0.4.3` release remains the previous stable source line.
 
 The public repository is [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags).
 
@@ -19,6 +17,8 @@ The public repository is [github.com/S4B4T0N/RaidThreeBags](https://github.com/S
 - movable, resizable and lockable windows;
 - optional coexistence handling for Bagnon;
 - safe physical arrangement of the live inventory through the `A-Z` button, `/rtb sort` or `/rtb arrange`;
+- occupied bottom slots remain fixed during A-Z arrangement; their items may receive compatible partial-stack merges;
+- live personal-bank arrangement uses the same frozen-bottom-slot behavior;
 - retained Sort Trace for the latest ten arrangement sessions.
 
 Settings, window positions, item-age records and Sort Trace are account-wide in `RaidThreeBagsDB`. The addon does not use network services or credentials.

@@ -1,6 +1,15 @@
 # Changelog
 
+## 0.4.4 - 2026-08-29 (development)
+
+- Added frozen occupied bottom-tail slots to inventory and live personal-bank arrangement.
+- Frozen slots remain at their original positions and cannot be normal swap targets or sources.
+- Compatible partial stacks may still merge into a frozen bottom stack.
+- Added Sort Trace coverage for frozen-slot preservation, merge-target behavior and unexpected frozen-slot changes.
+
 ## 0.4.3 - 2026-08-29
+
+- Added frozen occupied bottom-tail slots for inventory and live bank arrangement. These slots remain fixed during swaps, while compatible partial stacks may still merge into them.
 
 - Added live personal-bank arrangement with the same safe three-section hierarchy as inventory sorting.
 - Added matching bank-side `A-Z` sorting control.

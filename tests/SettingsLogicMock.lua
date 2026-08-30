@@ -2051,4 +2051,42 @@ for _, message in ipairs(chatMessages) do
     )
 end
 
+local savedInventoryData = inventoryData[0]
+local savedInventorySlotCount = inventorySlotCounts[0]
+local savedBagType = bagTypes[0]
+
+bagTypes[0] = 0
+inventorySlotCounts[0] = 3
+inventoryData[0] = {
+    MockInventoryItem(301, "Speed Potion", 1, "Consumable", 1, 10,
+        "Potion", 20, 1),
+    MockInventoryItem(302, "Poor Item", 0, "Miscellaneous"),
+    MockInventoryItem(301, "Speed Potion", 1, "Consumable", 9, 10,
+        "Potion", 20, 1)
+}
+RTB:UpdateItemAgeTracking(mockTime)
+local frozenPools = assert(RTB:BuildInventorySortPlan(mockTime))
+local frozenPool = frozenPools[1]
+assert(frozenPool.frozenCount == 1,
+    "the occupied bottom tail must be frozen")
+assert(frozenPool.slots[3].frozen and frozenPool.desired[3] == "301",
+    "the bottom item must remain in its original slot")
+local frozenSource, frozenTarget = RTB:FindInventoryConsolidationMove(frozenPools)
+assert(frozenSource and frozenTarget and frozenTarget.frozen,
+    "a frozen bottom stack must remain a valid merge target")
+assert(frozenSource.itemKey == frozenTarget.itemKey,
+    "frozen merge target must accept only the same item")
+
+inventoryData[0][3] = MockInventoryItem(304, "Different Item", 1, "Miscellaneous")
+local refreshedFrozen, refreshError = RTB:RefreshInventorySortPlan(frozenPools)
+assert(refreshedFrozen, refreshError)
+local changedSource, changedTarget, changedError =
+    RTB:FindNextInventorySortMove(frozenPools)
+assert(not changedSource and not changedTarget and changedError,
+    "sort must stop when a frozen slot changes unexpectedly")
+
+inventoryData[0] = savedInventoryData
+inventorySlotCounts[0] = savedInventorySlotCount
+bagTypes[0] = savedBagType
+
 print("SETTINGS LOGIC OK")

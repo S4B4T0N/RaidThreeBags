@@ -10,7 +10,7 @@ $stylePath = Join-Path $addonRoot 'RaidThreeUIStyle.lua'
 $uiPath = Join-Path $addonRoot 'RTB_UI.lua'
 $bankPath = Join-Path $addonRoot 'RTB_Bank.lua'
 $repositoryLicensePath = Join-Path $repoRoot 'LICENSE'
-$expectedVersion = '0.4.3'
+$expectedVersion = '0.4.4'
 
 foreach ($required in @(
     $tocPath,

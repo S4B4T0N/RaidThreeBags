@@ -30,6 +30,13 @@ Static validation cannot verify protected-action behavior or item safety. Use a 
 
 Record client/server build, addon set, result and stack traces. Promote the version only after all applicable checks pass.
 
+## Frozen bottom-slot checks - 0.4.4
+
+1. Fill the last displayed slot of an inventory or bank compatible pool with an item and place a sortable item above it.
+2. Press `A-Z` and confirm the occupied bottom item stays in the same slot.
+3. Place another stack of the same item above it and confirm the stack may merge into the frozen bottom stack without moving the bottom slot.
+4. Change the frozen slot externally during a long sort and confirm sorting stops with a verification message rather than moving the frozen item.
+5. Repeat the checks for the live personal bank while interacting with a banker.
 ## Automatic-arrangement checks - 0.4.3
 
 Use expendable test items and preserve a backup of `WTF/Account/<account>/SavedVariables/RaidThreeBags.lua` before the first test.
