@@ -526,6 +526,17 @@ end
 local function ApplyFrozenTail(pool)
     pool.frozenCount = 0
     pool.frozenSlots = {}
+    local hasEmptySlot = false
+    local _, slot
+    for _, slot in ipairs(pool.slots) do
+        if not slot.itemKey then
+            hasEmptySlot = true
+            break
+        end
+    end
+    if not hasEmptySlot then
+        return
+    end
     local index = #pool.slots
     while index >= 1 do
         local slot = pool.slots[index]

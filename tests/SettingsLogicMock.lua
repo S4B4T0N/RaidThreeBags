@@ -2056,20 +2056,24 @@ local savedInventorySlotCount = inventorySlotCounts[0]
 local savedBagType = bagTypes[0]
 
 bagTypes[0] = 0
-inventorySlotCounts[0] = 3
+inventorySlotCounts[0] = 5
 inventoryData[0] = {
     MockInventoryItem(301, "Speed Potion", 1, "Consumable", 1, 10,
         "Potion", 20, 1),
     MockInventoryItem(302, "Poor Item", 0, "Miscellaneous"),
+    MockInventoryItem(303, "Ancient Relic", 1, "Miscellaneous"),
+    nil,
     MockInventoryItem(301, "Speed Potion", 1, "Consumable", 9, 10,
         "Potion", 20, 1)
 }
 RTB:UpdateItemAgeTracking(mockTime)
+local frozenAgeStore = assert(RTB:GetCharacterItemAgeStore())
+frozenAgeStore["303"].firstSeen = mockTime - RTB.ITEM_AGE_SECONDS - 1
 local frozenPools = assert(RTB:BuildInventorySortPlan(mockTime))
 local frozenPool = frozenPools[1]
 assert(frozenPool.frozenCount == 1,
     "the occupied bottom tail must be frozen")
-assert(frozenPool.slots[3].frozen and frozenPool.desired[3] == "301",
+assert(frozenPool.slots[5].frozen,
     "the bottom item must remain in its original slot")
 local frozenSource, frozenTarget = RTB:FindInventoryConsolidationMove(frozenPools)
 assert(frozenSource and frozenTarget and frozenTarget.frozen,
@@ -2077,11 +2081,29 @@ assert(frozenSource and frozenTarget and frozenTarget.frozen,
 assert(frozenSource.itemKey == frozenTarget.itemKey,
     "frozen merge target must accept only the same item")
 
-inventoryData[0][3] = MockInventoryItem(304, "Different Item", 1, "Miscellaneous")
-local refreshedFrozen, refreshError = RTB:RefreshInventorySortPlan(frozenPools)
+inventorySlotCounts[0] = 4
+inventoryData[0] = {
+    MockInventoryItem(301, "Speed Potion", 1, "Consumable", 1, 10,
+        "Potion", 20, 1),
+    MockInventoryItem(302, "Poor Item", 0, "Miscellaneous"),
+    nil,
+    MockInventoryItem(301, "Speed Potion", 1, "Consumable", 9, 10,
+        "Potion", 20, 1)
+}
+local arrangedFrozenPools = assert(RTB:BuildInventorySortPlan(mockTime + 1))
+local arrangedFrozenPool = arrangedFrozenPools[1]
+assert(arrangedFrozenPool.frozenCount == 1 and arrangedFrozenPool.desired[4] == "301",
+    "the frozen bottom item must remain in the arranged plan")
+inventoryData[0] = {
+    MockInventoryItem(302, "Poor Item", 0, "Miscellaneous"),
+    nil,
+    nil,
+    MockInventoryItem(304, "Different Item", 1, "Miscellaneous")
+}
+local refreshedFrozen, refreshError = RTB:RefreshInventorySortPlan(arrangedFrozenPools)
 assert(refreshedFrozen, refreshError)
 local changedSource, changedTarget, changedError =
-    RTB:FindNextInventorySortMove(frozenPools)
+    RTB:FindNextInventorySortMove(arrangedFrozenPools)
 assert(not changedSource and not changedTarget and changedError,
     "sort must stop when a frozen slot changes unexpectedly")
 

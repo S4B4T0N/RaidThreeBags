@@ -12,7 +12,9 @@ Frozen slots:
 - may receive a compatible partial-stack merge from an unfrozen source;
 - are not treated as available separator or destination slots for normal rearrangement.
 
-The rule is applied independently to the character inventory and the live personal bank. Specialty-bag families remain separate compatible pools, as before.
+The rule is applied independently to character inventory and live personal bank; specialty-bag families remain separate pools.
+
+If a compatible pool is completely full, no slots are frozen for that session so normal arrangement is not blocked. To reserve a bottom item, leave at least one empty slot in the pool.
 
 ## Example
 
