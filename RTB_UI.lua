@@ -674,11 +674,66 @@ function RTB:ApplyWindowMagnet(frame)
     return true
 end
 
+function RTB:HideProfessionWindowProxies()
+    if self.ProspectWindowProxy then self.ProspectWindowProxy:Hide() end
+    if self.DisenchantWindowProxy then self.DisenchantWindowProxy:Hide() end
+end
+
+function RTB:BeginProfessionWindowInteraction(frame)
+    if not frame then return end
+    if self.ProfessionWindowInteraction == frame then return end
+    self.ProfessionWindowInteraction = frame
+    self:HideProfessionWindowProxies()
+    if InCombatLockdown() then return end
+
+    -- Ordinary visual proxies follow the native window without modifying
+    -- detached secure action frames throughout a drag or resize.
+    local definitions = {
+        { "ProspectButton", "InventoryProspectAnchor", "ProspectWindowProxy", 31252 },
+        { "DisenchantButton", "InventoryDisenchantAnchor", "DisenchantWindowProxy", 13262 }
+    }
+    local _, definition
+    for _, definition in ipairs(definitions) do
+        local secure = self[definition[1]]
+        local anchor = self[definition[2]]
+        if secure and anchor and secure:IsShown() then
+            local proxy = self[definition[3]]
+            if not proxy then
+                proxy = CreateFrame("Button", nil, anchor)
+                Style:CreateSquareIconChrome(proxy, select(3, GetSpellInfo(definition[4])))
+                proxy:EnableMouse(false)
+                proxy:SetPoint("CENTER", anchor, "CENTER", 0, 0)
+                self[definition[3]] = proxy
+            end
+            proxy:SetAlpha(secure:GetAlpha())
+            proxy:Show()
+            RegisterStateDriver(secure, "visibility", "hide")
+            secure.rtbVisibility = "hide"
+        end
+    end
+end
+
+function RTB:EndProfessionWindowInteraction(frame)
+    if self.ProfessionWindowInteraction ~= frame then return end
+    self.ProfessionWindowInteraction = nil
+    self:HideProfessionWindowProxies()
+    if self.RefreshProspecting then self:RefreshProspecting() end
+    if self.RefreshDisenchanting then self:RefreshDisenchanting() end
+end
+
+local professionInteractionEvents = CreateFrame("Frame")
+professionInteractionEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
+professionInteractionEvents:SetScript("OnEvent", function()
+    -- Proxies are ordinary frames; combat never requires a secure write here.
+    RTB:HideProfessionWindowProxies()
+end)
+
 function RTB:StartWindowMove(frame)
     if not frame then
         return
     end
 
+    self:BeginProfessionWindowInteraction(frame)
     frame.rtbUnlockMove =
         IsShiftKeyDown and IsShiftKeyDown() and true or false
     if frame.rtbUnlockMove then
@@ -693,6 +748,7 @@ function RTB:StartWindowResize(frame, corner)
     if not frame then
         return
     end
+    self:BeginProfessionWindowInteraction(frame)
     self:ReanchorWindowComponent(frame)
     frame:StartSizing(corner or "BOTTOMRIGHT")
 end
@@ -712,6 +768,7 @@ function RTB:StopWindowResize(frame)
     end
     frame:StopMovingOrSizing()
     self:SavePrimaryWindowStates()
+    self:EndProfessionWindowInteraction(frame)
 end
 
 function RTB:StopWindowMove(frame)
@@ -725,6 +782,7 @@ function RTB:StopWindowMove(frame)
     end
     frame.rtbUnlockMove = nil
     self:SavePrimaryWindowStates()
+    self:EndProfessionWindowInteraction(frame)
 end
 
 function RTB:CreateWindow(frameName, width, height, titleText)
@@ -740,6 +798,17 @@ function RTB:CreateWindow(frameName, width, height, titleText)
     window:SetFrameStrata("HIGH")
     window:SetToplevel(true)
     window:Hide()
+
+    -- This child receives OnHide for every shell, including the bank, even
+    -- though individual builders install their own window OnHide handlers.
+    local interactionObserver = CreateFrame("Frame", nil, window)
+    interactionObserver:SetScript("OnHide", function()
+        if RTB.ProfessionWindowInteraction == window then
+            window:StopMovingOrSizing()
+            RTB:EndProfessionWindowInteraction(window)
+        end
+    end)
+    window.rtbProfessionInteractionObserver = interactionObserver
 
     local windowHeader = CreateFrame("Frame", nil, window)
     windowHeader:SetHeight(30)

@@ -406,6 +406,10 @@ local function NewWidget(kind, name, parent)
         return self.parent
     end
 
+    function widget:SetAlpha(value) self.alpha = value end
+    function widget:GetAlpha() return rawget(self, "alpha") or 1 end
+    function widget:EnableMouse(value) self.mouseEnabled = value end
+
     function widget:SetID(value)
         self.id = value
     end
@@ -656,6 +660,7 @@ dofile(sourceDirectory .. "/RTB_Bank.lua")
 function GetSpellInfo(id)
     if id == 25229 then return "Jewelcrafting" end
     if id == 31252 then return "Prospecting", nil, "ProspectIcon" end
+    if id == 13262 then return "Disenchant", nil, "DisenchantIcon" end
 end
 function GetNumSkillLines() return 0 end
 function IsSpellKnown() return false end
@@ -2317,5 +2322,90 @@ assert(not changedSource and not changedTarget and changedError,
 inventoryData[0] = savedInventoryData
 inventorySlotCounts[0] = savedInventorySlotCount
 bagTypes[0] = savedBagType
+
+-- Real shell lifecycle swaps independent secure actions for passive child icons.
+do
+    local oldP, oldD = RTB.RefreshProspecting, RTB.RefreshDisenchanting
+    local pRefresh, dRefresh, visibilityWrites = 0, 0, 0
+    function RegisterStateDriver(frame, state, value)
+        assert(not combatLocked, "secure visibility changed in combat")
+        assert(state == "visibility")
+        frame.shown = value ~= "hide"
+        visibilityWrites = visibilityWrites + 1
+    end
+    RTB.InventoryProspectAnchor = NewWidget("Frame", nil, inventory)
+    RTB.InventoryProspectAnchor:SetPoint("TOPRIGHT", inventory, "TOPRIGHT", -60, -60)
+    RTB.InventoryDisenchantAnchor = NewWidget("Frame", nil, inventory)
+    RTB.InventoryDisenchantAnchor:SetPoint("TOPRIGHT", inventory, "TOPRIGHT", -94, -60)
+    RTB.ProspectButton = NewWidget("Button", nil, UIParent)
+    RTB.DisenchantButton = NewWidget("Button", nil, UIParent)
+    RTB.ProspectButton:SetAlpha(0.45)
+    RTB.DisenchantButton:SetAlpha(1)
+    RTB.RefreshProspecting = function(self)
+        assert(not self.ProfessionWindowInteraction, "resume happened before interaction ended")
+        pRefresh = pRefresh + 1
+        if not combatLocked then self.ProspectButton:Show() end
+    end
+    RTB.RefreshDisenchanting = function(self)
+        assert(not self.ProfessionWindowInteraction, "resume happened before interaction ended")
+        dRefresh = dRefresh + 1
+        if not combatLocked then self.DisenchantButton:Show() end
+    end
+    RTB:ClearWindowLocks()
+    for _, frame in ipairs({inventory, bank, RTB.SettingsFrame}) do
+        RTB:StartWindowMove(frame)
+        assert(RTB.ProfessionWindowInteraction == frame and frame.moving,
+            "window drag did not suspend profession refresh")
+        assert(not RTB.ProspectButton:IsShown() and not RTB.DisenchantButton:IsShown(),
+            "secure overlay remained visible during drag")
+        local proxy = assert(RTB.ProspectWindowProxy)
+        assert(proxy.parent == RTB.InventoryProspectAnchor and proxy.mouseEnabled == false,
+            "drag proxy must be a passive child of the normal layout")
+        assert(proxy:GetAlpha() == 0.45 and RTB.DisenchantWindowProxy:GetAlpha() == 1,
+            "drag proxy lost action appearance")
+        assert(proxy:IsShown() and RTB.DisenchantWindowProxy:IsShown())
+        RTB:BeginProfessionWindowInteraction(frame)
+        assert(proxy:IsShown(), "duplicate drag start hid its proxy")
+        RTB:StopWindowMove(frame)
+        assert(not RTB.ProfessionWindowInteraction and not proxy:IsShown()
+            and not RTB.DisenchantWindowProxy:IsShown(), "drag did not restore action mode")
+        assert(RTB.ProspectButton:IsShown() and RTB.DisenchantButton:IsShown())
+        RTB:StartWindowResize(frame, "BOTTOMRIGHT")
+        assert(RTB.ProfessionWindowInteraction == frame and frame.sizingPoint == "BOTTOMRIGHT")
+        RTB:StopWindowResize(frame)
+        assert(not RTB.ProfessionWindowInteraction, "resize left profession refresh paused")
+    end
+    assert(pRefresh == 6 and dRefresh == 6, "each window release must resync both profession actions")
+    RTB:ClearWindowLocks()
+    SetRect(bank, 500, 300, 400, 300)
+    SetRect(inventory, 900, 360, 300, 240)
+    assert(RTB:AddWindowLock(bank, "TOPRIGHT", inventory, "TOPLEFT"))
+    RTB:StartWindowMove(bank)
+    local proxyLeft = RTB.ProspectWindowProxy:GetLeft()
+    local proxyBottom = RTB.ProspectWindowProxy:GetBottom()
+    local writesBeforeMove = visibilityWrites
+    SetRect(bank, 620, 380, 400, 300)
+    assert(RTB.ProspectWindowProxy:GetLeft() == proxyLeft + 120
+        and RTB.ProspectWindowProxy:GetBottom() == proxyBottom + 80,
+        "linked-window proxy did not follow native anchor movement")
+    assert(visibilityWrites == writesBeforeMove,
+        "native proxy movement required secure visibility writes")
+    RTB:StopWindowMove(bank)
+    RTB:ClearWindowLocks()
+    RTB:StartWindowMove(RTB.SettingsFrame)
+    RTB.SettingsFrame.rtbProfessionInteractionObserver.scripts.OnHide()
+    assert(not RTB.ProfessionWindowInteraction and not RTB.SettingsFrame.moving,
+        "hidden shell left an active drag")
+    local beforeCombat = visibilityWrites
+    combatLocked = true
+    RTB:StartWindowMove(bank)
+    assert(RTB.ProfessionWindowInteraction == bank and visibilityWrites == beforeCombat,
+        "combat drag wrote secure visibility")
+    assert(not RTB.ProspectWindowProxy:IsShown() and not RTB.DisenchantWindowProxy:IsShown())
+    RTB:StopWindowMove(bank)
+    combatLocked = false
+    RTB.RefreshProspecting, RTB.RefreshDisenchanting = oldP, oldD
+    RTB.ProspectButton, RTB.DisenchantButton = nil, nil
+end
 
 print("SETTINGS LOGIC OK")

@@ -96,6 +96,7 @@ function RTB:FindDisenchantTarget()
 end
 
 function RTB:GetDisenchantBlockReason()
+    if self.ProfessionWindowInteraction then return "Finish moving or resizing the window first." end
     if InCombatLockdown() then return "Unavailable in combat." end
     if not self:GetDisenchantingEnabled() then return "Disabled in settings." end
     if not self.MainFrame or not self.MainFrame:IsShown() then return "Open inventory first." end
@@ -221,6 +222,8 @@ function RTB:CreateDisenchantButton()
 end
 
 function RTB:RefreshDisenchanting()
+    -- Normal proxy icons follow the window while secure overlays stay still.
+    if self.ProfessionWindowInteraction then return end
     if InCombatLockdown() then return end
     self:UpdateDisenchantPending()
     local hasProfession = self:HasEnchanting()

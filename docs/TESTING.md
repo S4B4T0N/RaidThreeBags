@@ -116,3 +116,10 @@ Recorded evidence: user confirmed Disenchant works on 0.7.0. Earlier single-dose
 - Move/resize windows, toggle settings, enter/leave combat and attempt competing sort/transfer/profession actions.
 
 Local behavior tests (Lua 5.1): `lua tests/SettingsLogicMock.lua .`, `lua tests/ProspectingLogicMock.lua .`, `lua tests/DisenchantLogicMock.lua .`. Mocks do not run the real secure engine or server item tables.
+
+## 0.7.2 window-interaction correction - 2026-11-20
+
+- User-operated A/B testing of 0.7.1 found smooth movement when both profession refresh functions were suspended. Individual layer/geometry experiments did not identify one native setter as the sole cause.
+- After an authorized installation and clean reload displaying 0.7.2, the user explicitly confirmed smooth dragging and resizing. Copied runtime files were byte-verified before the test; this is dated evidence, not a persistent claim about the current client installation.
+- Three expanded mocks cover interaction refresh/click guards, proxy visibility, linked windows, drag/resize/hide and combat-safe cleanup. All six Lua modules pass Lua 5.1 syntax. Release validation and Warperia layout simulation pass.
+- Linked bank/settings movement, combat transitions and the complete clean-install matrix still require real-client coverage. Historical 0.7.0 Disenchant and 0.5.0 single-dose Prospect evidence remain scoped to those tests.

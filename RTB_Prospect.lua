@@ -262,6 +262,7 @@ function RTB:UpdateProspectingPending()
 end
 
 function RTB:GetProspectingBlockReason(ignoreMerge)
+    if self.ProfessionWindowInteraction then return "Finish moving or resizing the window first." end
     if InCombatLockdown() then return "Unavailable in combat." end
     if not self:GetProspectingEnabled() then return "Disabled in settings." end
     if not self.MainFrame or not self.MainFrame:IsShown() then return "Open inventory first." end
@@ -348,6 +349,8 @@ function RTB:CreateProspectingButton()
 end
 
 function RTB:RefreshProspecting()
+    -- Normal proxy icons follow the window while secure overlays stay still.
+    if self.ProfessionWindowInteraction then return end
     if self.ProspectMergeSession and (not self:GetProspectingEnabled()
         or not self.MainFrame or not self.MainFrame:IsShown()) then
         self:FinishProspectingMerge("Ore merging stopped because inventory or Prospect was closed.")

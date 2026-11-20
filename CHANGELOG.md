@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2 - 2026-11-20
+
+- Fix jerky window dragging/resizing and blinking profession controls by suspending their secure-overlay refresh during manipulation.
+- Display noninteractive proxy icons while moving/resizing; restore secure overlays after release or hide. Block profession clicks during the interaction and preserve combat restrictions.
+- Keep item selection, green/blue/epic policies and one-click-per-cast behavior unchanged.
+- User confirmed smooth dragging and resizing after a clean reload of 0.7.2. Six-module Lua 5.1 syntax, three expanded mocks and release/layout validation pass; linked-window/combat paths remain mock-tested only.
+
 ## 0.7.1 - 2026-11-20
 
 - Remove the extra central Quickslot square from inventory/bank transfer buttons; keep the two arrows and outer frame.

@@ -136,6 +136,7 @@ RTB.InventoryProspectAnchor.left, RTB.InventoryProspectAnchor.bottom = 120, 240
 RTB.InventoryProspectAnchor.scale = 1.2
 
 local function Reset()
+    RTB.ProfessionWindowInteraction = nil
     bags, sizes = {}, {}
     profession, skill, learned, collapsed = true, 450, true, false
     casting, lootCount, moving, dead, cursor, targeting = false, 0, 0, false, false, false
@@ -506,5 +507,24 @@ for _, stop in ipairs(stopCases) do
     assert(not RTB.ProspectMergeSession and pickupCalls == 0,
         "unsafe state failed to stop merging before mutation")
 end
+
+-- Active window movement must not scan bags or mutate secure overlays.
+Reset(); Put(0, 1, 2770, 5)
+RTB:RefreshProspecting()
+RTB.ProfessionWindowInteraction = RTB.MainFrame
+local savedIterator = RTB.IterateContainerSlots
+RTB.IterateContainerSlots = function() error("bag scan during window interaction") end
+local writesDuringDrag = secureWrites
+RTB:RefreshProspecting()
+RTB:OnProspectingEvent("BAG_UPDATE", 0)
+Tick()
+assert(secureWrites == writesDuringDrag, "active drag refreshed secure Prospect overlay")
+RTB.IterateContainerSlots = savedIterator
+assert(not Click() and not RTB.ProspectPending, "active drag allowed Prospect cast")
+RTB.InventoryProspectAnchor.left = 333
+RTB.ProfessionWindowInteraction = nil
+RTB:RefreshProspecting()
+assert(RTB.ProspectButton.rtbX == 333 * 1.2 / 0.8,
+    "Prospect did not resync after window interaction")
 
 print("PROSPECTING LOGIC OK")

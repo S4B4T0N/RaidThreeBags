@@ -124,6 +124,7 @@ RTB.InventoryDisenchantAnchor = CreateFrame("Frame", nil, RTB.MainFrame)
 RTB.InventoryDisenchantAnchor.left, RTB.InventoryDisenchantAnchor.bottom = 126, 200
 
 local function Reset()
+    RTB.ProfessionWindowInteraction = nil
     bags, sizes, itemInfo = {}, {}, {}
     combat, cursor, moving, dead, targeting = false, false, 0, false, false
     casting, lootCount = false, 0
@@ -391,5 +392,23 @@ RTB:OnDisenchantEvent("PLAYER_REGEN_ENABLED")
 assert(button.visibility == "hide")
 RTB:SetDisenchantingEnabled(true)
 assert(button.visibility ~= "hide")
+
+-- Both timers and bag events remain inert while a window is manipulated.
+Reset(); Put(0, 1, 2200, 2)
+RTB:RefreshDisenchanting(); RTB:RefreshProspecting()
+RTB.ProfessionWindowInteraction = RTB.MainFrame
+local savedIterator = RTB.IterateContainerSlots
+RTB.IterateContainerSlots = function() error("bag scan during window interaction") end
+local writesDuringDrag = protectedWrites
+RTB:RefreshDisenchanting()
+RTB:OnDisenchantEvent("BAG_UPDATE", 0)
+Tick()
+assert(protectedWrites == writesDuringDrag, "active drag refreshed secure profession overlays")
+RTB.IterateContainerSlots = savedIterator
+assert(not Click() and not RTB.DisenchantPending, "active drag allowed Disenchant cast")
+RTB.InventoryDisenchantAnchor.left = 333
+RTB.ProfessionWindowInteraction = nil
+RTB:RefreshDisenchanting()
+assert(RTB.DisenchantButton.rtbX == 333, "Disenchant did not resync after window interaction")
 
 print("DISENCHANT LOGIC OK")

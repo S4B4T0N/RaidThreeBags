@@ -4,9 +4,9 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 
 ## Project status
 
-`0.7.1` is the current release. It adds Jewelcrafting Prospecting and Enchanting Disenchant controls, optional small-ore-stack merging, and removes the extra central square from both transfer-arrow icons. Frozen occupied bottom slots remain protected during arrangement.
+`0.7.2` is the current release. It fixes jerky dragging/resizing and blinking profession controls by suspending secure-button refresh during window manipulation and displaying ordinary noninteractive proxy icons. Secure actions return after the interaction ends. Existing item selection, quality restrictions and one-click-per-cast behavior are unchanged.
 
-Verification: Lua 5.1 syntax and three behavior mocks; user-confirmed Disenchant in 0.7.0 and an earlier single-dose Prospecting test. The 0.7.1 icon change and full clean-client/combat matrix have not been live-tested.
+Verification: six Lua 5.1 modules, three expanded behavior mocks and static release/layout checks passed. After a clean reload showing 0.7.2, the user confirmed smooth dragging and resizing. Linked bank/settings movement and combat transitions remain mock-tested only; a full clean-install matrix has not been completed.
 
 The public repository is [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags).
 
@@ -99,6 +99,8 @@ With PUC Lua 5.1 available, run:
 
 ```text
 lua tests/SettingsLogicMock.lua .
+lua tests/ProspectingLogicMock.lua .
+lua tests/DisenchantLogicMock.lua .
 ```
 
 See [TESTING.md](docs/TESTING.md) for in-client evidence and [WARPERIA_UPDATE_0.4.2.md](docs/WARPERIA_UPDATE_0.4.2.md) for the preserved `0.4.2` Warperia metadata.
