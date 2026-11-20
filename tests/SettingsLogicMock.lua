@@ -651,6 +651,19 @@ dofile(sourceDirectory .. "/RaidThreeBags.lua")
 dofile(sourceDirectory .. "/RaidThreeUIStyle.lua")
 dofile(sourceDirectory .. "/RTB_UI.lua")
 dofile(sourceDirectory .. "/RTB_Bank.lua")
+-- Load the real profession module as part of the settings integration test.
+-- This character is not a jewelcrafter; secure action behavior has its own mock.
+function GetSpellInfo(id)
+    if id == 25229 then return "Jewelcrafting" end
+    if id == 31252 then return "Prospecting", nil, "ProspectIcon" end
+end
+function GetNumSkillLines() return 0 end
+function IsSpellKnown() return false end
+function UnitCastingInfo() return nil end
+function UnitChannelInfo() return nil end
+function GetNumLootItems() return 0 end
+dofile(sourceDirectory .. "/RTB_Prospect.lua")
+dofile(sourceDirectory .. "/RTB_Disenchant.lua")
 
 local RTB = assert(RaidThreeBags)
 assert(type(RTB.ToggleSettings) == "function", "ToggleSettings missing")
@@ -881,6 +894,25 @@ assert(
 )
 assert(sortButton.rtbLabel.text == "A-Z",
     "inventory sort button label mismatch")
+local inventoryTransferButton = RTB:CreateInventoryTransferButton()
+assert(
+    inventoryTransferButton.width == 30
+        and inventoryTransferButton.height == 30
+        and inventoryTransferButton.normalTexture.width == 12
+        and inventoryTransferButton.normalTexture.height == 16
+        and inventoryTransferButton.point[2] == sortButton
+        and inventoryTransferButton.point[3] == "LEFT"
+        and inventoryTransferButton.point[4] == -4,
+    "inventory transfer button geometry mismatch"
+)
+assert(
+    inventoryTransferButton.normalTexture.texture
+        == "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"
+        and inventoryTransferButton.rtbBidirectionalLeft.texture
+            == "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up",
+    "inventory transfer icon is not bidirectional"
+)
+assert(not inventoryTransferButton.r3StyleBorder:IsShown(), "transfer central overlay must stay hidden")
 sortButton.scripts.OnEnter(sortButton)
 assert(
     string.find(GameTooltip.lines[1], "Three smart groups", 1, true)
@@ -953,6 +985,151 @@ assert(
 
 local sortTraceStore = assert(RTB:GetInventorySortTraceStore())
 local completedTrace = assert(sortTraceStore.sessions[#sortTraceStore.sessions])
+
+RTB.BankBagBar = NewWidget("Frame", "BankBagBar", UIParent)
+local bankSortButton = RTB:CreateBankSortButton()
+assert(bankSortButton.width == 30 and bankSortButton.height == 30,
+    "bank sort button must match the 30 px bank-bag controls")
+assert(
+    bankSortButton.parent == RTB.BankBagBar
+        and bankSortButton.point[1] == "RIGHT"
+        and bankSortButton.point[2] == RTB.BankBagBar
+        and bankSortButton.point[3] == "RIGHT"
+        and bankSortButton.point[4] == 0
+        and bankSortButton.point[5] == 0,
+    "bank sort button is not aligned at the right edge"
+)
+assert(bankSortButton.rtbLabel.text == "A-Z",
+    "bank sort button label mismatch")
+local bankTransferButton = RTB:CreateBankTransferButton()
+assert(
+    bankTransferButton.width == 30
+        and bankTransferButton.height == 30
+        and bankTransferButton.normalTexture.width == 12
+        and bankTransferButton.normalTexture.height == 16
+        and bankTransferButton.point[2] == bankSortButton
+        and bankTransferButton.point[3] == "LEFT"
+        and bankTransferButton.point[4] == -4,
+    "bank transfer button geometry mismatch"
+)
+assert(
+    bankTransferButton.normalTexture.texture
+        == "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"
+        and bankTransferButton.rtbBidirectionalLeft.texture
+            == "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up",
+    "bank transfer icon is not bidirectional"
+)
+
+bagTypes[BANK_CONTAINER] = 0
+inventorySlotCounts[BANK_CONTAINER] = 6
+inventoryData[BANK_CONTAINER] = {
+    MockInventoryItem(301, "Young Bank Item", 1, "Miscellaneous"),
+    MockInventoryItem(302, "Old Bank Item", 1, "Miscellaneous"),
+    MockInventoryItem(303, "Bank Trash", 0, "Miscellaneous"),
+    MockInventoryItem(304, "Bank Trade", 1, TRADE_GOODS),
+    nil,
+    nil
+}
+for bagID = 5, 11 do
+    bagTypes[bagID] = 0
+    inventorySlotCounts[bagID] = 0
+    inventoryData[bagID] = {}
+end
+ageStore["302"] = {
+    firstSeen = mockTime - RTB.ITEM_AGE_SECONDS,
+    count = 1,
+    lastSeen = mockTime
+}
+RTB.AtBank = true
+assert(RTB:SortBank(), "bank sorting did not start asynchronously")
+RunInventorySort()
+local expectedBankIDs = { 303, nil, 304, 301, nil, 302 }
+for planIndex = 1, #expectedBankIDs do
+    local item = inventoryData[BANK_CONTAINER][planIndex]
+    local actualID = item and item.id or nil
+    assert(
+        actualID == expectedBankIDs[planIndex],
+        "bank move result mismatch at slot " .. tostring(planIndex)
+    )
+end
+assert(not cursorHasItem, "bank sorting left an item on the cursor")
+assert(
+    string.find(chatMessages[#chatMessages], "Bank arranged", 1, true),
+    "bank sorting did not report completion"
+)
+local completedBankTrace = assert(
+    sortTraceStore.sessions[#sortTraceStore.sessions]
+)
+assert(
+    completedBankTrace.scope == "Bank"
+        and completedBankTrace.status == "PASS"
+        and completedBankTrace.moveCount > 0,
+    "successful bank sort trace was not persisted"
+)
+
+inventorySlotCounts[0] = 4
+inventoryData[0] = {
+    MockInventoryItem(501, "Recent Transfer", 1, "Miscellaneous"),
+    MockInventoryItem(502, "Old Transfer", 1, "Miscellaneous"),
+    MockInventoryItem(503, "Boundary Transfer", 1, "Miscellaneous"),
+    nil
+}
+for bagID = 1, 4 do
+    inventorySlotCounts[bagID] = 0
+    inventoryData[bagID] = {}
+end
+inventorySlotCounts[BANK_CONTAINER] = 4
+inventoryData[BANK_CONTAINER] = {}
+ageStore["501"] = { firstSeen = mockTime - 60 }
+ageStore["502"] = { firstSeen = mockTime - 901 }
+ageStore["503"] = { firstSeen = mockTime - 900 }
+local recentFirstSeen = ageStore["501"].firstSeen
+
+local function RunRecentTransfer()
+    local guard = 0
+    while RTB.TransferSession and guard < 400 do
+        guard = guard + 1
+        RTB.RecentTransferDriver.scripts.OnUpdate(
+            RTB.RecentTransferDriver,
+            0.10
+        )
+    end
+    assert(not RTB.TransferSession, "recent-item transfer did not finish")
+end
+
+assert(
+    RTB:TransferRecentItems("bags-to-bank"),
+    "bags-to-bank recent-item transfer did not start"
+)
+RunRecentTransfer()
+assert(
+    inventoryData[BANK_CONTAINER][1]
+        and inventoryData[BANK_CONTAINER][1].id == 501,
+    "recent item did not move from bags to bank"
+)
+assert(
+    inventoryData[0][2] and inventoryData[0][2].id == 502
+        and inventoryData[0][3] and inventoryData[0][3].id == 503,
+    "15-minute boundary or old item moved unexpectedly"
+)
+assert(
+    ageStore["501"].firstSeen == recentFirstSeen,
+    "bags-to-bank transfer reset item history"
+)
+assert(
+    RTB:TransferRecentItems("bank-to-bags"),
+    "bank-to-bags recent-item transfer did not start"
+)
+RunRecentTransfer()
+assert(
+    inventoryData[0][1] and inventoryData[0][1].id == 501,
+    "recent item did not move from bank to bags"
+)
+assert(
+    ageStore["501"].firstSeen == recentFirstSeen,
+    "bank-to-bags transfer reset item history"
+)
+assert(not cursorHasItem, "recent-item transfer left item on cursor")
 assert(
     sortTraceStore.enabled
         and completedTrace.schema == RTB.SORT_TRACE_SCHEMA
@@ -1145,7 +1322,7 @@ completedTrace.before.poolCounts = savedBeforePoolCounts
 completedTrace.after.poolCounts = savedAfterPoolCounts
 RTB:InitializeDB()
 assert(
-    RTB:GetInventorySortTraceStore().sessions[#sortTraceStore.sessions]
+    RTB:GetInventorySortTraceStore().sessions[completedTrace.id]
         == completedTrace,
     "sort trace did not survive SavedVariables DB reinitialization"
 )
@@ -1647,10 +1824,40 @@ assert(RTB.ResetInventoryButton, "inventory reset button missing")
 assert(RTB.ResetBankButton, "bank reset button missing")
 assert(RTB.WindowLockButton, "corner-lock button missing")
 assert(RTB.WindowLockButton.text == "ON", "corner lock must default to ON")
+assert(RTB.ProspectingSettingButton.text == "ON", "prospecting must default to ON")
+RTB.ProspectingSettingButton.scripts.OnClick()
+assert(not RTB:GetProspectingEnabled(), "prospecting settings toggle did not disable")
+assert(RTB.ProspectingSettingButton.text == "OFF", "prospecting toggle display stale")
+RTB:InitializeDB()
+assert(not RTB:GetProspectingEnabled(), "prospecting opt-out lost on DB reinitialization")
+RTB.ProspectingSettingButton.scripts.OnClick()
+assert(RTB:GetProspectingEnabled(), "prospecting settings toggle did not enable")
+assert(RTB.ProspectingAutoMergeButton.text == "ON", "ore auto-merge must default ON")
+RTB.ProspectingAutoMergeButton.scripts.OnClick()
+assert(not RTB:GetProspectingAutoMerge(), "ore auto-merge toggle did not disable")
+assert(RTB.ProspectingAutoMergeButton.text == "OFF", "ore auto-merge toggle display stale")
+RTB:InitializeDB()
+assert(not RTB:GetProspectingAutoMerge(), "ore auto-merge opt-out lost on DB reinitialization")
+RTB.ProspectingAutoMergeButton.scripts.OnClick()
+assert(RTB:GetProspectingAutoMerge(), "ore auto-merge toggle did not enable")
+assert(RTB.DisenchantingSettingButton.text == "ON", "disenchant must default ON")
+assert(RTB.DisenchantBlueSettingButton.text == "OFF", "blue disenchant must default OFF")
+RTB.DisenchantBlueSettingButton.scripts.OnClick()
+assert(RTB:GetDisenchantBlueEnabled(), "blue disenchant toggle did not enable")
+RTB:InitializeDB()
+assert(RTB:GetDisenchantBlueEnabled(), "blue disenchant preference lost on DB reinitialization")
+RTB.DisenchantBlueSettingButton.scripts.OnClick()
+assert(not RTB:GetDisenchantBlueEnabled(), "blue disenchant toggle did not disable")
+RTB.DisenchantingSettingButton.scripts.OnClick()
+assert(not RTB:GetDisenchantingEnabled(), "disenchant visibility toggle did not disable")
+RTB:InitializeDB()
+assert(not RTB:GetDisenchantingEnabled(), "disenchant visibility preference lost")
+RTB.DisenchantingSettingButton.scripts.OnClick()
+assert(RTB:GetDisenchantingEnabled(), "disenchant visibility toggle did not enable")
 assert(RTB.SettingsStateHeader.text == "VISIBLE", "visible column header missing")
 assert(RTB.SettingsFrame.resizable, "settings window is not resizable")
 assert(RTB.SettingsFrame.minWidth == 500, "settings minimum width mismatch")
-assert(RTB.SettingsFrame.minHeight == 336, "settings minimum height mismatch")
+assert(RTB.SettingsFrame.minHeight == 456, "settings minimum height mismatch")
 assert(RTB.SettingsFrame.maxWidth == 900, "settings maximum width mismatch")
 assert(RTB.SettingsFrame.maxHeight == 760, "settings maximum height mismatch")
 assert(RTB.SettingsResizeGrip, "settings resize grip missing")
@@ -1670,7 +1877,7 @@ assert(
 )
 
 RTB.SettingsFrame:SetWidth(500)
-RTB.SettingsFrame:SetHeight(336)
+RTB.SettingsFrame:SetHeight(456)
 assert(
     RTB.SettingsTableContent.width == 410,
     "minimum-width settings layout did not reflow"

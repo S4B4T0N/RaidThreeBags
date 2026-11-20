@@ -34,7 +34,7 @@ local SETTINGS_CONTENT_SIDE = 22
 local SETTINGS_INNER_SIDE = 14
 local SETTINGS_CONTENT_TOP = 54
 local SETTINGS_CONTENT_BOTTOM = 52
-local SETTINGS_LIST_TOP = 168
+local SETTINGS_LIST_TOP = 288
 local SETTINGS_LIST_BOTTOM = 10
 local SETTINGS_MIN_VISIBLE_ROWS = 2
 local SETTINGS_MIN_WIDTH =
@@ -1099,6 +1099,27 @@ function RTB:CreateInventoryTransferButton()
     return button
 end
 
+function RTB:CreateInventoryProspectAnchor()
+    -- Position marker only: the secure button has an independent UIParent
+    -- parent and absolute coordinates so this window stays movable in combat.
+    local anchor = CreateFrame("Frame", nil, self.InventoryBagBar)
+    anchor:SetWidth(30)
+    anchor:SetHeight(30)
+    anchor:SetPoint("RIGHT", self.InventoryTransferButton, "LEFT", -4, 0)
+    self.InventoryProspectAnchor = anchor
+    return anchor
+end
+
+function RTB:CreateInventoryDisenchantAnchor()
+    -- Only a layout marker; the secure action remains parented to UIParent.
+    local anchor = CreateFrame("Frame", nil, self.InventoryBagBar)
+    anchor:SetWidth(30)
+    anchor:SetHeight(30)
+    anchor:SetPoint("RIGHT", self.InventoryProspectAnchor, "LEFT", -4, 0)
+    self.InventoryDisenchantAnchor = anchor
+    return anchor
+end
+
 function RTB:GetBagParent(bagID)
     local parent = self.BagParents[bagID]
     if parent then
@@ -1404,6 +1425,8 @@ function RTB:BuildUI()
     self:LayoutInventoryBagSlots()
     self:CreateInventorySortButton()
     self:CreateInventoryTransferButton()
+    self:CreateInventoryProspectAnchor()
+    self:CreateInventoryDisenchantAnchor()
 
     local itemPanel = CreateFrame("Frame", nil, window)
     itemPanel:SetPoint("TOPLEFT", window, "TOPLEFT", 20, -94)
@@ -1512,8 +1535,20 @@ function RTB:BuildUI()
     window:SetScript("OnShow", function()
         RTB:RestorePrimaryWindowLock()
         RTB:RefreshAll()
+        if RTB.RefreshProspecting then
+            RTB:RefreshProspecting()
+        end
+        if RTB.RefreshDisenchanting then
+            RTB:RefreshDisenchanting()
+        end
     end)
     window:SetScript("OnHide", function()
+        if RTB.RefreshProspecting then
+            RTB:RefreshProspecting()
+        end
+        if RTB.RefreshDisenchanting then
+            RTB:RefreshDisenchanting()
+        end
         RTB:SaveWindowState()
         if RTB.SettingsFrame
             and RTB.SettingsAnchorFrame == window
@@ -1591,6 +1626,30 @@ function RTB:RefreshSettingsUI()
         SetOnOffToggleState(
             self.WindowLockButton,
             self:GetWindowLockEnabled()
+        )
+    end
+    if self.ProspectingSettingButton and self.GetProspectingEnabled then
+        SetOnOffToggleState(
+            self.ProspectingSettingButton,
+            self:GetProspectingEnabled()
+        )
+    end
+    if self.ProspectingAutoMergeButton and self.GetProspectingAutoMerge then
+        SetOnOffToggleState(
+            self.ProspectingAutoMergeButton,
+            self:GetProspectingAutoMerge()
+        )
+    end
+    if self.DisenchantingSettingButton and self.GetDisenchantingEnabled then
+        SetOnOffToggleState(
+            self.DisenchantingSettingButton,
+            self:GetDisenchantingEnabled()
+        )
+    end
+    if self.DisenchantBlueSettingButton and self.GetDisenchantBlueEnabled then
+        SetOnOffToggleState(
+            self.DisenchantBlueSettingButton,
+            self:GetDisenchantBlueEnabled()
         )
     end
 end
@@ -1782,12 +1841,192 @@ function RTB:BuildSettingsUI()
     divider:SetTexture(Style.TEXTURES.white)
     divider:SetVertexColor(Style:GetColor("separatorSoft"))
 
+    local prospectLabel = content:CreateFontString(
+        nil,
+        "OVERLAY",
+        "GameFontHighlightSmall"
+    )
+    prospectLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -94)
+    prospectLabel:SetText("Prospecting button")
+    Style:ApplyText(prospectLabel, "bodySmall")
+
+    local prospectToggle = CreateFrame(
+        "Button",
+        nil,
+        content,
+        "UIPanelButtonTemplate"
+    )
+    prospectToggle:SetWidth(70)
+    prospectToggle:SetHeight(22)
+    prospectToggle:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -88)
+    prospectToggle:SetScript("OnClick", function()
+        RTB:SetProspectingEnabled(not RTB:GetProspectingEnabled())
+        RTB:RefreshSettingsUI()
+    end)
+    prospectToggle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Prospecting button")
+        GameTooltip:AddLine(
+            "Show the inventory button automatically for Jewelcrafting "
+                .. "characters. Turn OFF to hide it.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "A click on a ready batch prospects five ore. Learn Prospecting "
+                .. "and finish casting and looting before the next click.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Changes made in combat apply when combat ends.",
+            1, 1, 1, true
+        )
+        GameTooltip:Show()
+    end)
+    prospectToggle:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    self.ProspectingSettingButton = prospectToggle
+
+    local mergeLabel = content:CreateFontString(
+        nil,
+        "OVERLAY",
+        "GameFontHighlightSmall"
+    )
+    mergeLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -124)
+    mergeLabel:SetText("Auto-merge ore")
+    Style:ApplyText(mergeLabel, "bodySmall")
+
+    local mergeToggle = CreateFrame(
+        "Button",
+        nil,
+        content,
+        "UIPanelButtonTemplate"
+    )
+    mergeToggle:SetWidth(70)
+    mergeToggle:SetHeight(22)
+    mergeToggle:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -118)
+    mergeToggle:SetScript("OnClick", function()
+        RTB:SetProspectingAutoMerge(not RTB:GetProspectingAutoMerge())
+        RTB:RefreshSettingsUI()
+    end)
+    mergeToggle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Auto-merge ore")
+        GameTooltip:AddLine(
+            "When no ready batch remains, click Prospect to combine "
+                .. "partial stacks of the same ore, such as 2 + 3.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Wait for the merge to finish, then click again to prospect. "
+                .. "Merging never casts Prospecting automatically.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Turn OFF to leave partial stacks unchanged.",
+            1, 1, 1, true
+        )
+        GameTooltip:Show()
+    end)
+    mergeToggle:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    self.ProspectingAutoMergeButton = mergeToggle
+
+    local disenchantLabel = content:CreateFontString(
+        nil,
+        "OVERLAY",
+        "GameFontHighlightSmall"
+    )
+    disenchantLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -154)
+    disenchantLabel:SetText("Disenchant button")
+    Style:ApplyText(disenchantLabel, "bodySmall")
+
+    local disenchantToggle = CreateFrame(
+        "Button", nil, content, "UIPanelButtonTemplate"
+    )
+    disenchantToggle:SetWidth(70)
+    disenchantToggle:SetHeight(22)
+    disenchantToggle:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -148)
+    disenchantToggle:SetScript("OnClick", function()
+        RTB:SetDisenchantingEnabled(not RTB:GetDisenchantingEnabled())
+        RTB:RefreshSettingsUI()
+    end)
+    disenchantToggle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Disenchant button")
+        GameTooltip:AddLine(
+            "Show the inventory button for Enchanting characters. It "
+                .. "automatically selects eligible green weapons and armor "
+                .. "from your bags.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Each click permanently destroys one selected item. Finish "
+                .. "casting and collect loot before clicking again.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Blue items require the separate option below. Epic items, "
+                .. "equipped gear and bank items are never selected.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Visibility changes made in combat apply when combat ends.",
+            1, 1, 1, true
+        )
+        GameTooltip:Show()
+    end)
+    disenchantToggle:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    self.DisenchantingSettingButton = disenchantToggle
+
+    local blueLabel = content:CreateFontString(
+        nil,
+        "OVERLAY",
+        "GameFontHighlightSmall"
+    )
+    blueLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -184)
+    blueLabel:SetText("Disenchant blue items")
+    Style:ApplyText(blueLabel, "bodySmall")
+
+    local blueToggle = CreateFrame(
+        "Button", nil, content, "UIPanelButtonTemplate"
+    )
+    blueToggle:SetWidth(70)
+    blueToggle:SetHeight(22)
+    blueToggle:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -178)
+    blueToggle:SetScript("OnClick", function()
+        RTB:SetDisenchantBlueEnabled(not RTB:GetDisenchantBlueEnabled())
+        RTB:RefreshSettingsUI()
+    end)
+    blueToggle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Disenchant blue items")
+        GameTooltip:AddLine(
+            "OFF by default: select only green weapons and armor. ON also "
+                .. "allows eligible blue weapons and armor in your bags.",
+            1, 1, 1, true
+        )
+        GameTooltip:AddLine(
+            "Clicking Disenchant permanently destroys the selected item. "
+                .. "Epic items are never selected, even with this option ON.",
+            1, 1, 1, true
+        )
+        GameTooltip:Show()
+    end)
+    blueToggle:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    self.DisenchantBlueSettingButton = blueToggle
+
     local bagsHeading = content:CreateFontString(
         nil,
         "OVERLAY",
         "GameFontNormal"
     )
-    bagsHeading:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -94)
+    bagsHeading:SetPoint("TOPLEFT", content, "TOPLEFT", 14, -214)
     bagsHeading:SetText("Special bag slot invisibility")
     Style:ApplyText(bagsHeading, "sectionHeading")
 
@@ -1797,7 +2036,7 @@ function RTB:BuildSettingsUI()
         "GameFontHighlightSmall"
     )
     note:SetPoint("TOPLEFT", bagsHeading, "BOTTOMLEFT", 0, -5)
-    note:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -116)
+    note:SetPoint("TOPRIGHT", content, "TOPRIGHT", -14, -236)
     note:SetHeight(30)
     note:SetJustifyH("LEFT")
     note:SetJustifyV("TOP")
@@ -1812,7 +2051,7 @@ function RTB:BuildSettingsUI()
         "OVERLAY",
         "GameFontNormalSmall"
     )
-    typeHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -150)
+    typeHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 18, -270)
     typeHeader:SetText("SPECIAL BAG TYPE")
     Style:ApplyText(typeHeader, "controlCaption")
 
@@ -1821,7 +2060,7 @@ function RTB:BuildSettingsUI()
         "OVERLAY",
         "GameFontNormalSmall"
     )
-    stateHeader:SetPoint("TOPRIGHT", content, "TOPRIGHT", -42, -150)
+    stateHeader:SetPoint("TOPRIGHT", content, "TOPRIGHT", -42, -270)
     stateHeader:SetText("VISIBLE")
     Style:ApplyText(stateHeader, "controlCaption")
     self.SettingsStateHeader = stateHeader

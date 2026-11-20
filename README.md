@@ -4,7 +4,9 @@ RaidThreeBags is a unified, resizable inventory and player-bank addon for World 
 
 ## Project status
 
-`0.4.4` is the current development version. It adds frozen occupied bottom-tail slots to inventory and live bank arrangement: swaps cannot move them, but compatible partial stacks may merge into them. The `0.4.3` release remains the previous stable source line.
+`0.7.1` is the current release. It adds Jewelcrafting Prospecting and Enchanting Disenchant controls, optional small-ore-stack merging, and removes the extra central square from both transfer-arrow icons. Frozen occupied bottom slots remain protected during arrangement.
+
+Verification: Lua 5.1 syntax and three behavior mocks; user-confirmed Disenchant in 0.7.0 and an earlier single-dose Prospecting test. The 0.7.1 icon change and full clean-client/combat matrix have not been live-tested.
 
 The public repository is [github.com/S4B4T0N/RaidThreeBags](https://github.com/S4B4T0N/RaidThreeBags).
 
@@ -25,7 +27,7 @@ Settings, window positions, item-age records and Sort Trace are account-wide in 
 
 ## Inventory arrangement
 
-Arrangement covers only the backpack and equipped bags 0-4. It does not sort the player bank, keyring, guild bank, cached characters or offline inventory.
+Arrangement covers only the backpack and equipped bags 0-4. The bank A-Z button sorts the live player bank separately. Keyring, guild bank, cached characters and offline inventory are excluded.
 
 Normal bags form one movement pool. Every exact nonzero specialty-bag family forms its own pool, so an item is never intentionally moved across incompatible bag families. Within each pool, items are divided into:
 
@@ -110,3 +112,15 @@ See [TESTING.md](docs/TESTING.md) for in-client evidence and [WARPERIA_UPDATE_0.
 ## License
 
 MIT. See [LICENSE](LICENSE). The root-level license is included inside the installable `RaidThreeBags` directory in every release ZIP.
+
+## Profession controls
+
+The buttons appear for the matching profession and can be disabled in `/rtb settings`.
+
+- **Prospect:** scans the backpack and all four equipped bags for supported ore. One click casts once on five ore; wait for cast and loot before clicking again. Optional **Auto-merge ore** joins small matching stacks (such as 2+3) when no ready dose remains, then waits for another click to cast.
+- **Disenchant:** selects green bag equipment by default. **Disenchant blue items** is OFF by default and enables blue gear explicitly. Epic and higher qualities are always excluded. Each click permanently destroys at most one selected item; the tooltip identifies the next candidate. Equipped items and bank contents are excluded. Bag gear is not protected by its age or frozen sorting position.
+- Failed candidates are skipped for the pass; right-click retries. Casting, loot, movement, combat and competing inventory actions block new processing. The server checks actual skill and item eligibility.
+
+Both spells require a fresh hardware click for each cast. There is no unattended casting mode. Settings persist account-wide.
+
+For direct installation, extract the release ZIP so `RaidThreeBags/RaidThreeBags.toc` is under `Interface/AddOns`. The GitHub default branch also retains the root-level TOC layout needed by GitHub-backed installers.

@@ -1,9 +1,9 @@
 ## Interface: 30300
-## Title: RaidThreeBags 0.4.4
+## Title: RaidThreeBags 0.7.1
 ## Notes: Unified resizable inventory and player bank with live bag slots
 ## Author: S4B4T0N
 ## X-License: MIT
-## Version: 0.4.4
+## Version: 0.7.1
 ## SavedVariables: RaidThreeBagsDB
 ## OptionalDeps: Bagnon
 
@@ -11,3 +11,5 @@ RaidThreeBags.lua
 RaidThreeUIStyle.lua
 RTB_UI.lua
 RTB_Bank.lua
+RTB_Prospect.lua
+RTB_Disenchant.lua

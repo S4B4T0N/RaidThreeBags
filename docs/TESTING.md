@@ -104,3 +104,15 @@ The final promotion gate is a target WoW 3.3.5a run of steps 1-15. PUC Lua synta
 - The existing in-client behavior evidence therefore applies to the unchanged
   Lua behavior. No fresh live-client runtime claim is made for the packaging
   operation itself.
+
+## 0.7.1 profession and transfer checks
+
+Recorded evidence: user confirmed Disenchant works on 0.7.0. Earlier single-dose Prospecting succeeded. These do not establish the following full client matrix:
+
+- Load with fresh and upgraded settings, with and without each profession and Bagnon.
+- Transfer icons: two arrows without the central square in inventory and bank; hover/pressed state and both transfer directions.
+- Prospect multiple stacks, failed candidates, hidden profession bags, 2+3 and 2+2+1 merges; each new cast needs a fresh click.
+- Disenchant expendable greens; blue disabled/enabled; epic exclusion; rejected candidate cursor cleanup; cancelled cast, loot and retry.
+- Move/resize windows, toggle settings, enter/leave combat and attempt competing sort/transfer/profession actions.
+
+Local behavior tests (Lua 5.1): `lua tests/SettingsLogicMock.lua .`, `lua tests/ProspectingLogicMock.lua .`, `lua tests/DisenchantLogicMock.lua .`. Mocks do not run the real secure engine or server item tables.

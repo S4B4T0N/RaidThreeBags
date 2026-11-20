@@ -10,7 +10,7 @@ $stylePath = Join-Path $addonRoot 'RaidThreeUIStyle.lua'
 $uiPath = Join-Path $addonRoot 'RTB_UI.lua'
 $bankPath = Join-Path $addonRoot 'RTB_Bank.lua'
 $repositoryLicensePath = Join-Path $repoRoot 'LICENSE'
-$expectedVersion = '0.4.4'
+$expectedVersion = '0.7.1'
 
 foreach ($required in @(
     $tocPath,
@@ -60,7 +60,9 @@ $expectedLoadOrder = @(
     'RaidThreeBags.lua',
     'RaidThreeUIStyle.lua',
     'RTB_UI.lua',
-    'RTB_Bank.lua'
+    'RTB_Bank.lua',
+    'RTB_Prospect.lua',
+    'RTB_Disenchant.lua'
 )
 if (($listedFiles -join "`n") -ne ($expectedLoadOrder -join "`n")) {
     throw "Unexpected TOC load order: $($listedFiles -join ', ')"

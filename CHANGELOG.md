@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 - 2026-11-20
+
+- Remove the extra central Quickslot square from inventory/bank transfer buttons; keep the two arrows and outer frame.
+- Add Jewelcrafting Prospect button with full inventory scanning and optional small-stack ore merging.
+- Add Enchanting Disenchant button: green gear by default, blue opt-in, epics always excluded. Revalidate item identity/quality and clear residual spell targeting.
+- One hardware click per cast; profession settings persist account-wide. Preserve frozen-bottom sorting and existing bank behavior.
+- Static validation and three Lua 5.1 mocks cover selection, settings and action coordination. User confirmed Disenchant in 0.7.0; earlier single-dose Prospect test passed. New icon and full clean-client/combat matrix remain unverified.
+
+
 ## 0.4.4 - 2026-08-29 (development)
 
 - Added frozen occupied bottom-tail slots to inventory and live personal-bank arrangement.

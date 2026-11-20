@@ -3,7 +3,7 @@
 -- Shared Raid Three visual tokens for WoW 3.3.5a / Lua 5.1.
 -- ============================================================
 
-local MODULE_VERSION = "1.0.2"
+local MODULE_VERSION = "1.0.3"
 
 local function ParseVersion(version)
     local major, minor, patch =
@@ -239,6 +239,8 @@ function Style:CreateBidirectionalArrowChrome(button)
         button,
         "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"
     )
+    -- Transfer controls show only arrows inside the outer button frame.
+    button.r3StyleBorder:Hide()
     local arrowOffset = 6.05
     local right = button:GetNormalTexture()
     right:SetWidth(12)

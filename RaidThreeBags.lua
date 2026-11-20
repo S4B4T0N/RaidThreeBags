@@ -9,7 +9,7 @@ RaidThreeBags = RaidThreeBags or {}
 local RTB = RaidThreeBags
 
 RTB.ADDON_NAME = "RaidThreeBags"
-RTB.VERSION = "0.4.4"
+RTB.VERSION = "0.7.1"
 RTB.BAG_IDS = { 0, 1, 2, 3, 4 }
 RTB.BANK_BAG_IDS = { 5, 6, 7, 8, 9, 10, 11 }
 RTB.SPECIAL_BAG_TYPES = {
@@ -43,6 +43,10 @@ RTB.SORT_TRACE_MAX_SESSIONS = 10
 RTB.SORT_TRACE_MAX_ID = 2147483647
 
 local DEFAULTS = {
+    prospectingEnabled = true,
+    prospectingAutoMerge = true,
+    disenchantingEnabled = true,
+    disenchantBlueEnabled = false,
     window = {
         point = "CENTER",
         relativePoint = "CENTER",
@@ -621,6 +625,22 @@ local function BuildPoolDesiredOrder(pool)
     return desired
 end
 
+-- Shared physical bag/slot traversal for arrangement and profession actions.
+-- Includes specialty bags even when their slots are hidden in the UI.
+function RTB:IterateContainerSlots(bagIDs)
+    local bagIndex, slotID = 1, 0
+    return function()
+        while bagIDs[bagIndex] ~= nil do
+            local bagID = bagIDs[bagIndex]
+            slotID = slotID + 1
+            if slotID <= (GetContainerNumSlots(bagID) or 0) then
+                return bagID, slotID
+            end
+            bagIndex, slotID = bagIndex + 1, 0
+        end
+    end
+end
+
 function RTB:BuildContainerSortPlan(observedAt, bagIDs, trackAges)
     observedAt = tonumber(observedAt) or (time and time()) or 0
     bagIDs = bagIDs or self.BAG_IDS
@@ -658,9 +678,8 @@ function RTB:BuildContainerSortPlan(observedAt, bagIDs, trackAges)
             table.insert(pools, pool)
         end
 
-        local slotCount = GetContainerNumSlots(bagID) or 0
-        local slotID
-        for slotID = 1, slotCount do
+        local _, slotID
+        for _, slotID in self:IterateContainerSlots({ bagID }) do
             order = order + 1
             local texture, count, locked, quality, _, _, itemLink =
                 GetContainerItemInfo(bagID, slotID)
@@ -2138,6 +2157,10 @@ function RTB:ContinueInventorySort()
 end
 
 function RTB:SortInventory()
+    if self.IsProspectingBusy and self:IsProspectingBusy() then
+        self:Print("Finish the profession action and close loot before arranging items.")
+        return
+    end
     if self.SortInProgress then
         self:Print("Inventory sorting is already running.")
         return false
@@ -2191,6 +2214,10 @@ function RTB:SortInventory()
 end
 
 function RTB:SortBank()
+    if self.IsProspectingBusy and self:IsProspectingBusy() then
+        self:Print("Finish the profession action and close loot before arranging items.")
+        return
+    end
     if self.SortInProgress then
         self:Print("Sorting is already running.")
         return false
@@ -2538,6 +2565,10 @@ function RTB:ContinueRecentTransfer()
 end
 
 function RTB:TransferRecentItems(direction)
+    if self.IsProspectingBusy and self:IsProspectingBusy() then
+        self:Print("Finish the profession action and close loot before transferring items.")
+        return
+    end
     if self.SortInProgress then
         self:Print("Sorting or transfer is already running.")
         return false
@@ -2803,6 +2834,8 @@ SlashCmdList.RAIDTHREEBAGS = function(message)
         RTB:Print("/rtb = open or close inventory")
         RTB:Print("/rtb bank = open or close the bank while at a banker")
         RTB:Print("/rtb settings = open settings")
+        RTB:Print("Prospecting: Jewelcrafting button, one click per 5 ore; toggle in settings")
+        RTB:Print("Disenchant: green bag gear; blue opt-in in settings; epics never; one click per item")
         RTB:Print("/rtb reset = reset both window positions and sizes")
         RTB:Print("/rtb reset inventory = reset the inventory window")
         RTB:Print("/rtb reset bank = reset the bank window")
